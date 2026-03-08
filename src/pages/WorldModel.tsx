@@ -82,6 +82,16 @@ const WorldModel = () => {
     setShowCausalTrace(chainId);
   }, []);
 
+  const entityNames = Object.fromEntries(liveEntities.map(e => [e.id, e.name]));
+
+  const handleAddAnnotation = useCallback((ann: Omit<Annotation, 'id' | 'timestamp'>) => {
+    setAnnotations(prev => [...prev, { ...ann, id: `ann-${Date.now()}-${Math.random().toString(36).slice(2)}`, timestamp: Date.now() }]);
+  }, []);
+
+  const handleDeleteAnnotation = useCallback((id: string) => {
+    setAnnotations(prev => prev.filter(a => a.id !== id));
+  }, []);
+
   const stressedCount = liveEntities.filter(e => e.status === 'stressed' || e.status === 'critical').length;
   const criticalCount = liveEntities.filter(e => e.status === 'critical').length;
 
