@@ -395,6 +395,14 @@ const WorldModel = () => {
         entities={liveEntities}
       />
 
+      {/* Risk Heatmap Modal */}
+      <RiskHeatmap
+        isOpen={showRiskHeatmap}
+        onClose={() => setShowRiskHeatmap(false)}
+        entities={liveEntities}
+        onEntitySelect={handleEntitySelect}
+      />
+
       {/* Timeline Scrubber */}
       {showTimeline && (
         <TimelineScrubber
