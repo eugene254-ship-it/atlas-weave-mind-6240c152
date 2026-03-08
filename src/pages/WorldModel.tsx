@@ -5,8 +5,11 @@ import { EntityDetailPanel } from '@/components/world-model/EntityDetailPanel';
 import { EntityList } from '@/components/world-model/EntityList';
 import { CausalPathViewer } from '@/components/world-model/CausalPathViewer';
 import { LayerToggle } from '@/components/world-model/LayerToggle';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Globe, List, Network, Activity } from 'lucide-react';
+import { OntologyBrowser } from '@/components/world-model/OntologyBrowser';
+import { TimelineScrubber } from '@/components/world-model/TimelineScrubber';
+import { ScenarioComparison } from '@/components/world-model/ScenarioComparison';
+import { AnimatePresence } from 'framer-motion';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
@@ -18,6 +21,10 @@ const WorldModel = () => {
   const [activeLayers, setActiveLayers] = useState<string[]>([...allLayers]);
   const [viewMode, setViewMode] = useState<ViewMode>('canvas');
   const [showCausalTrace, setShowCausalTrace] = useState<string | null>(null);
+  const [showOntology, setShowOntology] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(true);
+  const [showScenarios, setShowScenarios] = useState(false);
+  const [showFlowParticles, setShowFlowParticles] = useState(true);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
@@ -49,7 +56,6 @@ const WorldModel = () => {
   }, []);
 
   const handleTraceCausal = useCallback(() => {
-    // Find a relevant causal chain for the selected entity
     setShowCausalTrace('drought-cascade');
   }, []);
 
@@ -72,7 +78,7 @@ const WorldModel = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           {/* System Health Summary */}
           <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5">
             <div className="flex items-center gap-1.5">
@@ -95,6 +101,50 @@ const WorldModel = () => {
                 {criticalCount} critical
               </span>
             </div>
+          </div>
+
+          {/* Tool Toggles */}
+          <div className="flex items-center gap-1 rounded-lg border border-border/50 bg-muted/20 p-0.5">
+            <button
+              onClick={() => setShowOntology(!showOntology)}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                showOntology ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Ontology Browser"
+            >
+              <BookOpen className="h-3 w-3" />
+              <span className="hidden lg:inline">Ontology</span>
+            </button>
+            <button
+              onClick={() => setShowTimeline(!showTimeline)}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                showTimeline ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Timeline"
+            >
+              <Clock className="h-3 w-3" />
+              <span className="hidden lg:inline">Timeline</span>
+            </button>
+            <button
+              onClick={() => setShowScenarios(!showScenarios)}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                showScenarios ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Scenarios"
+            >
+              <Beaker className="h-3 w-3" />
+              <span className="hidden lg:inline">Scenarios</span>
+            </button>
+            <button
+              onClick={() => setShowFlowParticles(!showFlowParticles)}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                showFlowParticles ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Flow Particles"
+            >
+              <Waves className="h-3 w-3" />
+              <span className="hidden lg:inline">Flows</span>
+            </button>
           </div>
 
           {/* View Toggle */}
@@ -128,6 +178,9 @@ const WorldModel = () => {
 
       {/* Main Content */}
       <div className="relative flex flex-1 overflow-hidden">
+        {/* Ontology Browser */}
+        <OntologyBrowser isOpen={showOntology} onClose={() => setShowOntology(false)} />
+
         {/* Canvas / List */}
         <div className="relative flex-1" ref={canvasRef}>
           {viewMode === 'canvas' ? (
@@ -140,6 +193,7 @@ const WorldModel = () => {
                 activeLayers={activeLayers}
                 hoveredEntityId={hoveredEntityId}
                 onEntityHover={setHoveredEntityId}
+                showFlowParticles={showFlowParticles}
               />
             </div>
           ) : (
@@ -160,6 +214,9 @@ const WorldModel = () => {
               />
             )}
           </AnimatePresence>
+
+          {/* Scenario Comparison Overlay */}
+          <ScenarioComparison isOpen={showScenarios} onClose={() => setShowScenarios(false)} />
         </div>
 
         {/* Detail Panel */}
@@ -174,6 +231,14 @@ const WorldModel = () => {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Timeline Scrubber */}
+      {showTimeline && (
+        <TimelineScrubber
+          selectedEntityId={selectedEntityId}
+          onEntitySelect={handleEntitySelect}
+        />
+      )}
     </div>
   );
 };
