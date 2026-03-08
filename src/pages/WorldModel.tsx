@@ -50,6 +50,16 @@ const WorldModel = () => {
 
   const { liveEntities, ticks, isLive, setIsLive } = useRealtimeSimulation(true);
 
+  useKeyboardShortcuts({
+    entities: liveEntities,
+    activeLayers,
+    selectedEntityId,
+    onEntitySelect: (id) => { setSelectedEntityId(id); if (!id) setShowCausalTrace(null); },
+    viewMode,
+    onViewModeChange: setViewMode,
+    onToggleSearch: () => {},
+  });
+
   useEffect(() => {
     const updateSize = () => {
       if (canvasRef.current) {
