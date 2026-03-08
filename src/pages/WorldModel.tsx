@@ -42,6 +42,7 @@ const WorldModel = () => {
   const [showDepGraph, setShowDepGraph] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [showWhatIf, setShowWhatIf] = useState(false);
+  const [showRiskHeatmap, setShowRiskHeatmap] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
