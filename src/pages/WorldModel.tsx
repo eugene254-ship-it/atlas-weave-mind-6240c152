@@ -202,6 +202,29 @@ const WorldModel = () => {
               <GitBranch className="h-3 w-3" />
               <span className="hidden lg:inline">Deps</span>
             </button>
+            <button
+              onClick={() => setShowAnnotations(!showAnnotations)}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                showAnnotations ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Annotations"
+            >
+              <MessageSquarePlus className="h-3 w-3" />
+              <span className="hidden lg:inline">Notes</span>
+              {annotations.length > 0 && (
+                <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-primary/20 px-1 font-mono text-[8px] text-primary">
+                  {annotations.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setShowWhatIf(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="What-If Simulation"
+            >
+              <Wand2 className="h-3 w-3" />
+              <span className="hidden lg:inline">What-If</span>
+            </button>
             <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
 
