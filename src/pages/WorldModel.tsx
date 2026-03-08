@@ -15,9 +15,12 @@ import { CrossSystemSearch } from '@/components/world-model/CrossSystemSearch';
 import { LiveSignalFeed } from '@/components/world-model/LiveSignalFeed';
 import { DependencyGraph } from '@/components/world-model/DependencyGraph';
 import { ExportButton } from '@/components/world-model/ExportButton';
+import { CriticalAlertSystem } from '@/components/world-model/CriticalAlertSystem';
+import { AnnotationPanel, type Annotation } from '@/components/world-model/AnnotationSystem';
+import { WhatIfSimulation } from '@/components/world-model/WhatIfSimulation';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2 } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
@@ -35,6 +38,9 @@ const WorldModel = () => {
   const [showFlowParticles, setShowFlowParticles] = useState(true);
   const [showEvidence, setShowEvidence] = useState(false);
   const [showDepGraph, setShowDepGraph] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(false);
+  const [showWhatIf, setShowWhatIf] = useState(false);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
@@ -74,6 +80,16 @@ const WorldModel = () => {
 
   const handleShowCausalTrace = useCallback((chainId: string) => {
     setShowCausalTrace(chainId);
+  }, []);
+
+  const entityNames = Object.fromEntries(liveEntities.map(e => [e.id, e.name]));
+
+  const handleAddAnnotation = useCallback((ann: Omit<Annotation, 'id' | 'timestamp'>) => {
+    setAnnotations(prev => [...prev, { ...ann, id: `ann-${Date.now()}-${Math.random().toString(36).slice(2)}`, timestamp: Date.now() }]);
+  }, []);
+
+  const handleDeleteAnnotation = useCallback((id: string) => {
+    setAnnotations(prev => prev.filter(a => a.id !== id));
   }, []);
 
   const stressedCount = liveEntities.filter(e => e.status === 'stressed' || e.status === 'critical').length;
@@ -185,6 +201,29 @@ const WorldModel = () => {
             >
               <GitBranch className="h-3 w-3" />
               <span className="hidden lg:inline">Deps</span>
+            </button>
+            <button
+              onClick={() => setShowAnnotations(!showAnnotations)}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                showAnnotations ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Annotations"
+            >
+              <MessageSquarePlus className="h-3 w-3" />
+              <span className="hidden lg:inline">Notes</span>
+              {annotations.length > 0 && (
+                <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-primary/20 px-1 font-mono text-[8px] text-primary">
+                  {annotations.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setShowWhatIf(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="What-If Simulation"
+            >
+              <Wand2 className="h-3 w-3" />
+              <span className="hidden lg:inline">What-If</span>
             </button>
             <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
@@ -305,6 +344,20 @@ const WorldModel = () => {
         </AnimatePresence>
       </div>
 
+      {/* Critical Alert System */}
+      <CriticalAlertSystem ticks={ticks} entityNames={entityNames} onEntitySelect={handleEntitySelect} />
+
+      {/* Annotation Panel */}
+      <AnnotationPanel
+        entityId={selectedEntityId}
+        entityName={selectedEntity?.name || ''}
+        isOpen={showAnnotations && !!selectedEntityId}
+        onClose={() => setShowAnnotations(false)}
+        annotations={annotations}
+        onAddAnnotation={handleAddAnnotation}
+        onDeleteAnnotation={handleDeleteAnnotation}
+      />
+
       {/* Dependency Graph Modal */}
       <DependencyGraph
         isOpen={showDepGraph}
@@ -312,6 +365,13 @@ const WorldModel = () => {
         selectedEntityId={selectedEntityId}
         onEntitySelect={handleEntitySelect}
         liveEntities={liveEntities}
+      />
+
+      {/* What-If Simulation Modal */}
+      <WhatIfSimulation
+        isOpen={showWhatIf}
+        onClose={() => setShowWhatIf(false)}
+        entities={liveEntities}
       />
 
       {/* Timeline Scrubber */}
