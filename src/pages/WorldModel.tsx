@@ -19,11 +19,13 @@ import { CriticalAlertSystem } from '@/components/world-model/CriticalAlertSyste
 import { AnnotationPanel, type Annotation } from '@/components/world-model/AnnotationSystem';
 import { WhatIfSimulation } from '@/components/world-model/WhatIfSimulation';
 import { RiskHeatmap } from '@/components/world-model/RiskHeatmap';
+import { ScenarioBranching } from '@/components/world-model/ScenarioBranching';
+import { RelationshipEditor } from '@/components/world-model/RelationshipEditor';
 import { PresenceIndicators } from '@/components/world-model/PresenceIndicators';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame, Link2, Split } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
@@ -44,6 +46,8 @@ const WorldModel = () => {
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [showWhatIf, setShowWhatIf] = useState(false);
   const [showRiskHeatmap, setShowRiskHeatmap] = useState(false);
+  const [showBranching, setShowBranching] = useState(false);
+  const [showRelEditor, setShowRelEditor] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -247,6 +251,22 @@ const WorldModel = () => {
               <Flame className="h-3 w-3" />
               <span className="hidden lg:inline">Risk</span>
             </button>
+            <button
+              onClick={() => setShowBranching(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Scenario Branching"
+            >
+              <Split className="h-3 w-3" />
+              <span className="hidden lg:inline">Branch</span>
+            </button>
+            <button
+              onClick={() => setShowRelEditor(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Relationship Editor"
+            >
+              <Link2 className="h-3 w-3" />
+              <span className="hidden lg:inline">Links</span>
+            </button>
             <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
 
@@ -406,6 +426,23 @@ const WorldModel = () => {
         isOpen={showRiskHeatmap}
         onClose={() => setShowRiskHeatmap(false)}
         entities={liveEntities}
+        onEntitySelect={handleEntitySelect}
+      />
+
+      {/* Scenario Branching Modal */}
+      <ScenarioBranching
+        isOpen={showBranching}
+        onClose={() => setShowBranching(false)}
+        entities={liveEntities}
+        onEntitySelect={handleEntitySelect}
+      />
+
+      {/* Relationship Editor Modal */}
+      <RelationshipEditor
+        isOpen={showRelEditor}
+        onClose={() => setShowRelEditor(false)}
+        entities={liveEntities}
+        selectedEntityId={selectedEntityId}
         onEntitySelect={handleEntitySelect}
       />
 
