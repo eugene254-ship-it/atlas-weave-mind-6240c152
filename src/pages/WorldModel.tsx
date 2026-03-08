@@ -429,6 +429,23 @@ const WorldModel = () => {
         onEntitySelect={handleEntitySelect}
       />
 
+      {/* Scenario Branching Modal */}
+      <ScenarioBranching
+        isOpen={showBranching}
+        onClose={() => setShowBranching(false)}
+        entities={liveEntities}
+        onEntitySelect={handleEntitySelect}
+      />
+
+      {/* Relationship Editor Modal */}
+      <RelationshipEditor
+        isOpen={showRelEditor}
+        onClose={() => setShowRelEditor(false)}
+        entities={liveEntities}
+        selectedEntityId={selectedEntityId}
+        onEntitySelect={handleEntitySelect}
+      />
+
       {/* Timeline Scrubber */}
       {showTimeline && (
         <TimelineScrubber
