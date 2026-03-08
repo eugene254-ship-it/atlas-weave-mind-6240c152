@@ -238,6 +238,14 @@ const WorldModel = () => {
               <Wand2 className="h-3 w-3" />
               <span className="hidden lg:inline">What-If</span>
             </button>
+            <button
+              onClick={() => setShowRiskHeatmap(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Risk Heatmap"
+            >
+              <Flame className="h-3 w-3" />
+              <span className="hidden lg:inline">Risk</span>
+            </button>
             <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
 
