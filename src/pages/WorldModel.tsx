@@ -15,9 +15,12 @@ import { CrossSystemSearch } from '@/components/world-model/CrossSystemSearch';
 import { LiveSignalFeed } from '@/components/world-model/LiveSignalFeed';
 import { DependencyGraph } from '@/components/world-model/DependencyGraph';
 import { ExportButton } from '@/components/world-model/ExportButton';
+import { CriticalAlertSystem } from '@/components/world-model/CriticalAlertSystem';
+import { AnnotationPanel, type Annotation } from '@/components/world-model/AnnotationSystem';
+import { WhatIfSimulation } from '@/components/world-model/WhatIfSimulation';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2 } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
