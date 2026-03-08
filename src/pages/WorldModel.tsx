@@ -38,6 +38,9 @@ const WorldModel = () => {
   const [showFlowParticles, setShowFlowParticles] = useState(true);
   const [showEvidence, setShowEvidence] = useState(false);
   const [showDepGraph, setShowDepGraph] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(false);
+  const [showWhatIf, setShowWhatIf] = useState(false);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
