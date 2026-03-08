@@ -19,6 +19,7 @@ import { CriticalAlertSystem } from '@/components/world-model/CriticalAlertSyste
 import { AnnotationPanel, type Annotation } from '@/components/world-model/AnnotationSystem';
 import { WhatIfSimulation } from '@/components/world-model/WhatIfSimulation';
 import { RiskHeatmap } from '@/components/world-model/RiskHeatmap';
+import { PresenceIndicators } from '@/components/world-model/PresenceIndicators';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { AnimatePresence } from 'framer-motion';
@@ -328,6 +329,11 @@ const WorldModel = () => {
           {/* Live Signal Feed */}
           {viewMode !== 'list' && (
             <LiveSignalFeed ticks={ticks} isLive={isLive} onToggle={() => setIsLive(!isLive)} />
+          )}
+
+          {/* Presence Indicators */}
+          {viewMode !== 'list' && (
+            <PresenceIndicators containerRef={canvasRef} selectedEntityId={selectedEntityId} />
           )}
 
           {/* Causal Trace Overlay */}
