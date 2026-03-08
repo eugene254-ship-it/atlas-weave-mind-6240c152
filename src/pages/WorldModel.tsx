@@ -18,9 +18,11 @@ import { ExportButton } from '@/components/world-model/ExportButton';
 import { CriticalAlertSystem } from '@/components/world-model/CriticalAlertSystem';
 import { AnnotationPanel, type Annotation } from '@/components/world-model/AnnotationSystem';
 import { WhatIfSimulation } from '@/components/world-model/WhatIfSimulation';
+import { RiskHeatmap } from '@/components/world-model/RiskHeatmap';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2 } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
@@ -40,12 +42,23 @@ const WorldModel = () => {
   const [showDepGraph, setShowDepGraph] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [showWhatIf, setShowWhatIf] = useState(false);
+  const [showRiskHeatmap, setShowRiskHeatmap] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
   const { liveEntities, ticks, isLive, setIsLive } = useRealtimeSimulation(true);
+
+  useKeyboardShortcuts({
+    entities: liveEntities,
+    activeLayers,
+    selectedEntityId,
+    onEntitySelect: (id) => { setSelectedEntityId(id); if (!id) setShowCausalTrace(null); },
+    viewMode,
+    onViewModeChange: setViewMode,
+    onToggleSearch: () => {},
+  });
 
   useEffect(() => {
     const updateSize = () => {
@@ -225,6 +238,14 @@ const WorldModel = () => {
               <Wand2 className="h-3 w-3" />
               <span className="hidden lg:inline">What-If</span>
             </button>
+            <button
+              onClick={() => setShowRiskHeatmap(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Risk Heatmap"
+            >
+              <Flame className="h-3 w-3" />
+              <span className="hidden lg:inline">Risk</span>
+            </button>
             <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
 
@@ -372,6 +393,14 @@ const WorldModel = () => {
         isOpen={showWhatIf}
         onClose={() => setShowWhatIf(false)}
         entities={liveEntities}
+      />
+
+      {/* Risk Heatmap Modal */}
+      <RiskHeatmap
+        isOpen={showRiskHeatmap}
+        onClose={() => setShowRiskHeatmap(false)}
+        entities={liveEntities}
+        onEntitySelect={handleEntitySelect}
       />
 
       {/* Timeline Scrubber */}
