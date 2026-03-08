@@ -1,6 +1,5 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useState } from 'react';
 import { entities, relationships, nodePositions, entityTypeConfig, type WorldEntity } from '@/data/worldModelData';
-import { motion } from 'framer-motion';
 
 interface Props {
   width: number;
@@ -10,6 +9,7 @@ interface Props {
   activeLayers: string[];
   hoveredEntityId: string | null;
   onEntityHover: (id: string | null) => void;
+  showFlowParticles?: boolean;
 }
 
 const statusColorMap: Record<string, string> = {
@@ -21,10 +21,34 @@ const statusColorMap: Record<string, string> = {
   degraded: 'hsl(20, 70%, 45%)',
 };
 
-export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover }: Props) {
+// Flow type colors for particles
+const flowColors: Record<string, string> = {
+  'supplies water to': 'hsl(200, 70%, 55%)',
+  'regulates flow of': 'hsl(155, 65%, 45%)',
+  'feeds into': 'hsl(200, 70%, 55%)',
+  'allocates water to': 'hsl(200, 70%, 55%)',
+  'supplies food to': 'hsl(45, 80%, 50%)',
+  'feeds': 'hsl(45, 80%, 50%)',
+  'supports': 'hsl(175, 70%, 50%)',
+  'serves': 'hsl(175, 70%, 50%)',
+  'sustains': 'hsl(155, 65%, 45%)',
+  'replenishes': 'hsl(200, 70%, 55%)',
+};
+
+interface Particle {
+  id: string;
+  relId: string;
+  progress: number;
+  speed: number;
+  color: string;
+}
+
+export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true }: Props) {
   const pad = 60;
   const w = width - pad * 2;
   const h = height - pad * 2;
+
+  const [particles, setParticles] = useState<Particle[]>([]);
 
   const visibleEntities = useMemo(() =>
     entities.filter(e => activeLayers.includes(e.type)),
@@ -52,11 +76,48 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
     );
   }, [selectedEntityId]);
 
+  // Flow particle animation
+  useEffect(() => {
+    if (!showFlowParticles) { setParticles([]); return; }
+
+    // Initialize particles
+    const initial: Particle[] = [];
+    visibleRelationships.forEach((rel, ri) => {
+      const count = Math.ceil(rel.strength * 3);
+      for (let i = 0; i < count; i++) {
+        initial.push({
+          id: `${rel.id}-p${i}`,
+          relId: rel.id,
+          progress: (i / count),
+          speed: 0.003 + Math.random() * 0.004,
+          color: flowColors[rel.type] || 'hsl(175, 70%, 50%)',
+        });
+      }
+    });
+    setParticles(initial);
+
+    const interval = setInterval(() => {
+      setParticles(prev => prev.map(p => ({
+        ...p,
+        progress: (p.progress + p.speed) % 1,
+      })));
+    }, 30);
+
+    return () => clearInterval(interval);
+  }, [showFlowParticles, visibleRelationships]);
+
   return (
     <svg width={width} height={height} className="absolute inset-0">
       <defs>
         <filter id="glow">
           <feGaussianBlur stdDeviation="4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="particle-glow">
+          <feGaussianBlur stdDeviation="2" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -79,7 +140,7 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
               x1={s.x} y1={s.y} x2={t.x} y2={t.y}
               stroke={isActive ? 'hsl(175, 70%, 50%)' : 'hsl(220, 15%, 20%)'}
               strokeWidth={isActive ? 2 : isHovered ? 1.5 : 0.8}
-              strokeOpacity={isActive ? 0.6 : isHovered ? 0.4 : 0.2}
+              strokeOpacity={isActive ? 0.6 : isHovered ? 0.4 : 0.15}
               strokeDasharray={r.confidence === 'low' ? '4,4' : r.confidence === 'medium' ? '8,4' : 'none'}
               markerEnd="url(#arrowhead)"
             />
@@ -94,6 +155,29 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
               />
             )}
           </g>
+        );
+      })}
+
+      {/* Flow Particles */}
+      {showFlowParticles && particles.map(particle => {
+        const rel = visibleRelationships.find(r => r.id === particle.relId);
+        if (!rel) return null;
+        const s = getPos(rel.source);
+        const t = getPos(rel.target);
+        const x = s.x + (t.x - s.x) * particle.progress;
+        const y = s.y + (t.y - s.y) * particle.progress;
+        const isActive = selectedEntityId ? (selectedEntityId === rel.source || selectedEntityId === rel.target) : true;
+        if (!isActive && selectedEntityId) return null;
+        return (
+          <circle
+            key={particle.id}
+            cx={x}
+            cy={y}
+            r={2.5}
+            fill={particle.color}
+            opacity={isActive ? 0.8 : 0.3}
+            filter="url(#particle-glow)"
+          />
         );
       })}
 
