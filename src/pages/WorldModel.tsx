@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { entities, causalChains, type EntityType } from '@/data/worldModelData';
+import { entities as baseEntities, causalChains, type EntityType } from '@/data/worldModelData';
 import { WorldCanvas } from '@/components/world-model/WorldCanvas';
 import { GeoMapLayer } from '@/components/world-model/GeoMapLayer';
 import { EntityDetailPanel } from '@/components/world-model/EntityDetailPanel';
@@ -12,8 +12,12 @@ import { ScenarioComparison } from '@/components/world-model/ScenarioComparison'
 import { EvidenceDrawer } from '@/components/world-model/EvidenceDrawer';
 import { RoleViewSelector, type RoleView } from '@/components/world-model/RoleViewSelector';
 import { CrossSystemSearch } from '@/components/world-model/CrossSystemSearch';
+import { LiveSignalFeed } from '@/components/world-model/LiveSignalFeed';
+import { DependencyGraph } from '@/components/world-model/DependencyGraph';
+import { ExportButton } from '@/components/world-model/ExportButton';
+import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
@@ -30,9 +34,12 @@ const WorldModel = () => {
   const [showScenarios, setShowScenarios] = useState(false);
   const [showFlowParticles, setShowFlowParticles] = useState(true);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [showDepGraph, setShowDepGraph] = useState(false);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+
+  const { liveEntities, ticks, isLive, setIsLive } = useRealtimeSimulation(true);
 
   useEffect(() => {
     const updateSize = () => {
@@ -48,7 +55,7 @@ const WorldModel = () => {
     return () => window.removeEventListener('resize', updateSize);
   }, [viewMode]);
 
-  const selectedEntity = selectedEntityId ? entities.find(e => e.id === selectedEntityId) || null : null;
+  const selectedEntity = selectedEntityId ? liveEntities.find(e => e.id === selectedEntityId) || null : null;
 
   const toggleLayer = useCallback((layer: string) => {
     setActiveLayers(prev =>
@@ -69,8 +76,8 @@ const WorldModel = () => {
     setShowCausalTrace(chainId);
   }, []);
 
-  const stressedCount = entities.filter(e => e.status === 'stressed' || e.status === 'critical').length;
-  const criticalCount = entities.filter(e => e.status === 'critical').length;
+  const stressedCount = liveEntities.filter(e => e.status === 'stressed' || e.status === 'critical').length;
+  const criticalCount = liveEntities.filter(e => e.status === 'critical').length;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
@@ -83,7 +90,7 @@ const WorldModel = () => {
           <div>
             <h1 className="font-display text-base font-bold text-foreground">Atlas World Model</h1>
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              Living Systems Interface · {entities.length} entities · {stressedCount} under stress
+              Living Systems Interface · {liveEntities.length} entities · {stressedCount} under stress
             </span>
           </div>
         </div>
@@ -97,7 +104,7 @@ const WorldModel = () => {
             <div className="flex items-center gap-1.5">
               <Activity className="h-3 w-3 text-status-stable" />
               <span className="font-mono text-[10px] text-muted-foreground">
-                {entities.filter(e => e.status === 'stable').length} stable
+                {liveEntities.filter(e => e.status === 'stable').length} stable
               </span>
             </div>
             <div className="h-3 w-px bg-border/50" />
@@ -162,7 +169,7 @@ const WorldModel = () => {
               <span className="hidden lg:inline">Flows</span>
             </button>
             <button
-              onClick={() => { setShowEvidence(!showEvidence); }}
+              onClick={() => setShowEvidence(!showEvidence)}
               className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
                 showEvidence ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
@@ -171,6 +178,15 @@ const WorldModel = () => {
               <ShieldCheck className="h-3 w-3" />
               <span className="hidden lg:inline">Evidence</span>
             </button>
+            <button
+              onClick={() => setShowDepGraph(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Dependency Graph"
+            >
+              <GitBranch className="h-3 w-3" />
+              <span className="hidden lg:inline">Deps</span>
+            </button>
+            <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
 
           {/* View Toggle */}
@@ -249,6 +265,11 @@ const WorldModel = () => {
             />
           )}
 
+          {/* Live Signal Feed */}
+          {viewMode !== 'list' && (
+            <LiveSignalFeed ticks={ticks} isLive={isLive} onToggle={() => setIsLive(!isLive)} />
+          )}
+
           {/* Causal Trace Overlay */}
           <AnimatePresence>
             {showCausalTrace && causalChains[showCausalTrace] && (
@@ -283,6 +304,15 @@ const WorldModel = () => {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Dependency Graph Modal */}
+      <DependencyGraph
+        isOpen={showDepGraph}
+        onClose={() => setShowDepGraph(false)}
+        selectedEntityId={selectedEntityId}
+        onEntitySelect={handleEntitySelect}
+        liveEntities={liveEntities}
+      />
 
       {/* Timeline Scrubber */}
       {showTimeline && (
