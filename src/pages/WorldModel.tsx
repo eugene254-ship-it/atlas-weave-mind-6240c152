@@ -331,6 +331,11 @@ const WorldModel = () => {
             <LiveSignalFeed ticks={ticks} isLive={isLive} onToggle={() => setIsLive(!isLive)} />
           )}
 
+          {/* Presence Indicators */}
+          {viewMode !== 'list' && (
+            <PresenceIndicators containerRef={canvasRef} selectedEntityId={selectedEntityId} />
+          )}
+
           {/* Causal Trace Overlay */}
           <AnimatePresence>
             {showCausalTrace && causalChains[showCausalTrace] && (
