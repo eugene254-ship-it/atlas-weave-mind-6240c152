@@ -18,9 +18,11 @@ import { ExportButton } from '@/components/world-model/ExportButton';
 import { CriticalAlertSystem } from '@/components/world-model/CriticalAlertSystem';
 import { AnnotationPanel, type Annotation } from '@/components/world-model/AnnotationSystem';
 import { WhatIfSimulation } from '@/components/world-model/WhatIfSimulation';
+import { RiskHeatmap } from '@/components/world-model/RiskHeatmap';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2 } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
