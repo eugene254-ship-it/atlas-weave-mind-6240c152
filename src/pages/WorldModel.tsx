@@ -344,6 +344,20 @@ const WorldModel = () => {
         </AnimatePresence>
       </div>
 
+      {/* Critical Alert System */}
+      <CriticalAlertSystem ticks={ticks} entityNames={entityNames} onEntitySelect={handleEntitySelect} />
+
+      {/* Annotation Panel */}
+      <AnnotationPanel
+        entityId={selectedEntityId}
+        entityName={selectedEntity?.name || ''}
+        isOpen={showAnnotations && !!selectedEntityId}
+        onClose={() => setShowAnnotations(false)}
+        annotations={annotations}
+        onAddAnnotation={handleAddAnnotation}
+        onDeleteAnnotation={handleDeleteAnnotation}
+      />
+
       {/* Dependency Graph Modal */}
       <DependencyGraph
         isOpen={showDepGraph}
@@ -351,6 +365,13 @@ const WorldModel = () => {
         selectedEntityId={selectedEntityId}
         onEntitySelect={handleEntitySelect}
         liveEntities={liveEntities}
+      />
+
+      {/* What-If Simulation Modal */}
+      <WhatIfSimulation
+        isOpen={showWhatIf}
+        onClose={() => setShowWhatIf(false)}
+        entities={liveEntities}
       />
 
       {/* Timeline Scrubber */}
