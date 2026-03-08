@@ -46,6 +46,8 @@ const WorldModel = () => {
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [showWhatIf, setShowWhatIf] = useState(false);
   const [showRiskHeatmap, setShowRiskHeatmap] = useState(false);
+  const [showBranching, setShowBranching] = useState(false);
+  const [showRelEditor, setShowRelEditor] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
