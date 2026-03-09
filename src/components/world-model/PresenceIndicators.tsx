@@ -33,8 +33,8 @@ const ACTIONS = [
 ];
 
 const ENTITY_IDS = [
-  'river-tana', 'masinga-dam', 'mwea-irrigation', 'tana-county-govt',
-  'pastoralist-community', 'regional-trade', 'flood-health', 'delta-ecosystem', 'seven-forks'
+  'river-tana', 'dam-masinga', 'irrigation-mwea', 'water-nairobi',
+  'community-kibera', 'food-nairobi', 'health-nairobi', 'forest-upper-tana', 'hydro-kindaruma'
 ];
 
 interface Props {

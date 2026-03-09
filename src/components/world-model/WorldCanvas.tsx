@@ -55,7 +55,7 @@ interface Particle {
   color: string;
 }
 
-export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true, customRelationships = [] }: Props) {
+export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true, customRelationships = [], entities }: Props) {
   const pad = 60;
   const w = width - pad * 2;
   const h = height - pad * 2;
@@ -63,8 +63,8 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
   const [particles, setParticles] = useState<Particle[]>([]);
 
   const visibleEntities = useMemo(() =>
-    entities.filter(e => activeLayers.includes(e.type)),
-    [activeLayers]
+    entities ? entities.filter(e => activeLayers.includes(e.type)) : [],
+    [activeLayers, entities]
   );
 
   const visibleIds = useMemo(() => new Set(visibleEntities.map(e => e.id)), [visibleEntities]);

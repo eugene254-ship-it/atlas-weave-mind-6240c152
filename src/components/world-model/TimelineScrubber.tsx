@@ -247,7 +247,7 @@ export function TimelineScrubber({ selectedEntityId, onEntitySelect, forks = [] 
             if (forkIdx < 0) return null;
             const forkPct = allEvents.length > 1 ? (forkIdx / (allEvents.length - 1)) * 100 : 50;
             return (
-              <g key={fork.id}>
+              <div key={fork.id}>
                 {/* Fork origin marker */}
                 <div
                   className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
@@ -300,7 +300,7 @@ export function TimelineScrubber({ selectedEntityId, onEntitySelect, forks = [] 
                     />
                   </svg>
                 </div>
-              </g>
+              </div>
             );
           })}
 
