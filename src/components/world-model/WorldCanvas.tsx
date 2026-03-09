@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useEffect, useState } from 'react';
-import { entities, relationships, nodePositions, entityTypeConfig, type WorldEntity } from '@/data/worldModelData';
+import { relationships, nodePositions, entityTypeConfig, type WorldEntity } from '@/data/worldModelData';
 
 interface CustomRelationship {
   id: string;
