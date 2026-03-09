@@ -40,9 +40,17 @@ const typeBorderColors: Record<string, string> = {
 
 const speedOptions = [0.5, 1, 2, 4];
 
+interface TimelineFork {
+  id: string;
+  name: string;
+  forkPoint: string;
+  color: string;
+}
+
 interface Props {
   selectedEntityId: string | null;
   onEntitySelect: (id: string) => void;
+  forks?: TimelineFork[];
 }
 
 export function TimelineScrubber({ selectedEntityId, onEntitySelect }: Props) {
