@@ -21,6 +21,7 @@ interface Props {
   onEntityHover: (id: string | null) => void;
   showFlowParticles?: boolean;
   customRelationships?: CustomRelationship[];
+  entities?: WorldEntity[];
 }
 
 const statusColorMap: Record<string, string> = {
