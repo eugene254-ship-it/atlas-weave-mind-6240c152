@@ -327,6 +327,7 @@ const WorldModel = () => {
                 hoveredEntityId={hoveredEntityId}
                 onEntityHover={setHoveredEntityId}
                 showFlowParticles={showFlowParticles}
+                customRelationships={customRelationships}
               />
             </div>
           ) : viewMode === 'geo' ? (
