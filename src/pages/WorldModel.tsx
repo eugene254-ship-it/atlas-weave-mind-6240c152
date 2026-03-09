@@ -471,6 +471,14 @@ const WorldModel = () => {
         onCustomRelationshipsChange={setCustomRelationships}
       />
 
+      {/* Dashboard Overview */}
+      <DashboardOverview
+        isOpen={showDashboard}
+        onClose={() => setShowDashboard(false)}
+        entities={liveEntities}
+        onEntitySelect={handleEntitySelect}
+      />
+
       {/* Timeline Scrubber */}
       {showTimeline && (
         <TimelineScrubber
