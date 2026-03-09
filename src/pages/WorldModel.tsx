@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { entities as baseEntities, causalChains, type EntityType } from '@/data/worldModelData';
+import { entities as baseEntities, causalChains, type EntityType, type WorldRelationship, type ConfidenceLevel } from '@/data/worldModelData';
 import { WorldCanvas } from '@/components/world-model/WorldCanvas';
 import { GeoMapLayer } from '@/components/world-model/GeoMapLayer';
 import { EntityDetailPanel } from '@/components/world-model/EntityDetailPanel';
@@ -48,6 +48,7 @@ const WorldModel = () => {
   const [showRiskHeatmap, setShowRiskHeatmap] = useState(false);
   const [showBranching, setShowBranching] = useState(false);
   const [showRelEditor, setShowRelEditor] = useState(false);
+  const [customRelationships, setCustomRelationships] = useState<(WorldRelationship & { isCustom?: boolean })[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -326,6 +327,7 @@ const WorldModel = () => {
                 hoveredEntityId={hoveredEntityId}
                 onEntityHover={setHoveredEntityId}
                 showFlowParticles={showFlowParticles}
+                customRelationships={customRelationships}
               />
             </div>
           ) : viewMode === 'geo' ? (
@@ -444,6 +446,8 @@ const WorldModel = () => {
         entities={liveEntities}
         selectedEntityId={selectedEntityId}
         onEntitySelect={handleEntitySelect}
+        customRelationships={customRelationships}
+        onCustomRelationshipsChange={setCustomRelationships}
       />
 
       {/* Timeline Scrubber */}
@@ -451,6 +455,11 @@ const WorldModel = () => {
         <TimelineScrubber
           selectedEntityId={selectedEntityId}
           onEntitySelect={handleEntitySelect}
+          forks={[
+            { id: 'fork-drought', name: 'Severe Drought', forkPoint: 'Jun 2025', color: 'hsl(0, 72%, 55%)' },
+            { id: 'fork-reforest', name: 'Reforestation', forkPoint: 'Mar 2025', color: 'hsl(175, 70%, 50%)' },
+            { id: 'fork-infra', name: 'Infra Surge', forkPoint: 'Sep 2025', color: 'hsl(270, 60%, 60%)' },
+          ]}
         />
       )}
     </div>

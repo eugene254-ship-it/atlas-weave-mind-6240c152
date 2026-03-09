@@ -1,6 +1,16 @@
 import { useMemo, useCallback, useEffect, useState } from 'react';
 import { entities, relationships, nodePositions, entityTypeConfig, type WorldEntity } from '@/data/worldModelData';
 
+interface CustomRelationship {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  strength: number;
+  confidence: 'high' | 'medium' | 'low';
+  isCustom?: boolean;
+}
+
 interface Props {
   width: number;
   height: number;
@@ -10,6 +20,7 @@ interface Props {
   hoveredEntityId: string | null;
   onEntityHover: (id: string | null) => void;
   showFlowParticles?: boolean;
+  customRelationships?: CustomRelationship[];
 }
 
 const statusColorMap: Record<string, string> = {
@@ -43,7 +54,7 @@ interface Particle {
   color: string;
 }
 
-export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true }: Props) {
+export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true, customRelationships = [] }: Props) {
   const pad = 60;
   const w = width - pad * 2;
   const h = height - pad * 2;
@@ -126,6 +137,9 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
         <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="hsl(175, 70%, 50%)" opacity="0.4" />
         </marker>
+        <marker id="arrowhead-custom" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="hsl(270, 60%, 60%)" opacity="0.6" />
+        </marker>
       </defs>
 
       {/* Edges */}
@@ -178,6 +192,44 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
             opacity={isActive ? 0.8 : 0.3}
             filter="url(#particle-glow)"
           />
+        );
+      })}
+
+      {/* Custom Relationship Edges */}
+      {customRelationships.filter(r => visibleIds.has(r.source) && visibleIds.has(r.target)).map(r => {
+        const s = getPos(r.source);
+        const t = getPos(r.target);
+        const isActive = selectedEntityId === r.source || selectedEntityId === r.target;
+        return (
+          <g key={r.id}>
+            <line
+              x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+              stroke="hsl(270, 60%, 60%)"
+              strokeWidth={isActive ? 2.5 : 1.5}
+              strokeOpacity={isActive ? 0.8 : 0.5}
+              strokeDasharray="6,3"
+              markerEnd="url(#arrowhead-custom)"
+            />
+            {/* Glow line for custom edges */}
+            <line
+              x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+              stroke="hsl(270, 60%, 60%)"
+              strokeWidth={4}
+              strokeOpacity={0.1}
+            />
+            {/* Label at midpoint */}
+            <text
+              x={(s.x + t.x) / 2}
+              y={(s.y + t.y) / 2 - 6}
+              textAnchor="middle"
+              fill="hsl(270, 60%, 70%)"
+              fontSize="8"
+              fontFamily="'Space Grotesk', sans-serif"
+              opacity={isActive ? 1 : 0.6}
+            >
+              {r.type}
+            </text>
+          </g>
         );
       })}
 

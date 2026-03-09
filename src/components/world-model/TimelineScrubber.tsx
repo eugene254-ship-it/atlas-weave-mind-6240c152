@@ -40,12 +40,20 @@ const typeBorderColors: Record<string, string> = {
 
 const speedOptions = [0.5, 1, 2, 4];
 
+interface TimelineFork {
+  id: string;
+  name: string;
+  forkPoint: string;
+  color: string;
+}
+
 interface Props {
   selectedEntityId: string | null;
   onEntitySelect: (id: string) => void;
+  forks?: TimelineFork[];
 }
 
-export function TimelineScrubber({ selectedEntityId, onEntitySelect }: Props) {
+export function TimelineScrubber({ selectedEntityId, onEntitySelect, forks = [] }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -232,6 +240,69 @@ export function TimelineScrubber({ selectedEntityId, onEntitySelect }: Props) {
               );
             })}
           </div>
+
+          {/* Fork visualization */}
+          {forks.map(fork => {
+            const forkIdx = allEvents.findIndex(e => e.date === fork.forkPoint);
+            if (forkIdx < 0) return null;
+            const forkPct = allEvents.length > 1 ? (forkIdx / (allEvents.length - 1)) * 100 : 50;
+            return (
+              <g key={fork.id}>
+                {/* Fork origin marker */}
+                <div
+                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                  style={{ left: `${forkPct}%` }}
+                >
+                  <div className="relative">
+                    <div
+                      className="h-3 w-3 rounded-full border-2"
+                      style={{ borderColor: fork.color, backgroundColor: `${fork.color}33` }}
+                    />
+                    {/* Branch line diverging upward */}
+                    <svg className="absolute -top-5 left-1/2 -translate-x-1/2" width="60" height="24" viewBox="0 0 60 24" fill="none">
+                      <path
+                        d={`M30 24 Q30 12, 55 4`}
+                        stroke={fork.color}
+                        strokeWidth="1.5"
+                        strokeDasharray="3,3"
+                        fill="none"
+                        opacity="0.7"
+                      />
+                      <circle cx="55" cy="4" r="2.5" fill={fork.color} opacity="0.8" />
+                    </svg>
+                    {/* Fork label */}
+                    <span
+                      className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border px-1.5 py-0.5 font-mono text-[7px] uppercase tracking-wider"
+                      style={{
+                        color: fork.color,
+                        borderColor: `${fork.color}40`,
+                        backgroundColor: `${fork.color}15`,
+                      }}
+                    >
+                      {fork.name}
+                    </span>
+                  </div>
+                </div>
+                {/* Divergence line extending to the right */}
+                <div
+                  className="absolute top-0 h-full pointer-events-none"
+                  style={{ left: `${forkPct}%`, width: `${100 - forkPct}%` }}
+                >
+                  <svg className="h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100" fill="none">
+                    <path
+                      d="M0 50 Q20 50, 40 25 Q60 10, 100 8"
+                      stroke={fork.color}
+                      strokeWidth="1"
+                      strokeDasharray="4,4"
+                      fill="none"
+                      opacity="0.35"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                </div>
+              </g>
+            );
+          })}
 
           {/* Event markers */}
           <div className="absolute inset-0 flex items-center py-2">

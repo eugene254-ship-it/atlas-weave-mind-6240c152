@@ -32,10 +32,11 @@ interface Props {
   entities: WorldEntity[];
   selectedEntityId: string | null;
   onEntitySelect: (id: string) => void;
+  customRelationships: CustomRelationship[];
+  onCustomRelationshipsChange: (rels: CustomRelationship[]) => void;
 }
 
-export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId, onEntitySelect }: Props) {
-  const [customRelationships, setCustomRelationships] = useState<CustomRelationship[]>([]);
+export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId, onEntitySelect, customRelationships, onCustomRelationshipsChange }: Props) {
   const [newSource, setNewSource] = useState('');
   const [newTarget, setNewTarget] = useState('');
   const [newType, setNewType] = useState(relationshipTypes[0]);
@@ -62,7 +63,7 @@ export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId
   const handleAdd = useCallback(() => {
     if (!newSource || !newTarget || newSource === newTarget) return;
     const id = `custom-r-${Date.now()}`;
-    setCustomRelationships(prev => [...prev, {
+    onCustomRelationshipsChange([...customRelationships, {
       id,
       source: newSource,
       target: newTarget,
@@ -78,8 +79,8 @@ export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId
   }, [newSource, newTarget, newType, newStrength, newConfidence]);
 
   const handleDelete = useCallback((id: string) => {
-    setCustomRelationships(prev => prev.filter(r => r.id !== id));
-  }, []);
+    onCustomRelationshipsChange(customRelationships.filter(r => r.id !== id));
+  }, [customRelationships, onCustomRelationshipsChange]);
 
   const strengthColor = (s: number) => {
     if (s >= 0.8) return 'text-status-stable';
