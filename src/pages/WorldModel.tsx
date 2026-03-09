@@ -455,6 +455,11 @@ const WorldModel = () => {
         <TimelineScrubber
           selectedEntityId={selectedEntityId}
           onEntitySelect={handleEntitySelect}
+          forks={[
+            { id: 'fork-drought', name: 'Severe Drought', forkPoint: 'Jun 2025', color: 'hsl(0, 72%, 55%)' },
+            { id: 'fork-reforest', name: 'Reforestation', forkPoint: 'Mar 2025', color: 'hsl(175, 70%, 50%)' },
+            { id: 'fork-infra', name: 'Infra Surge', forkPoint: 'Sep 2025', color: 'hsl(270, 60%, 60%)' },
+          ]}
         />
       )}
     </div>
