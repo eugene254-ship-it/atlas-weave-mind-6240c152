@@ -32,10 +32,11 @@ interface Props {
   entities: WorldEntity[];
   selectedEntityId: string | null;
   onEntitySelect: (id: string) => void;
+  customRelationships: CustomRelationship[];
+  onCustomRelationshipsChange: (rels: CustomRelationship[]) => void;
 }
 
-export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId, onEntitySelect }: Props) {
-  const [customRelationships, setCustomRelationships] = useState<CustomRelationship[]>([]);
+export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId, onEntitySelect, customRelationships, onCustomRelationshipsChange }: Props) {
   const [newSource, setNewSource] = useState('');
   const [newTarget, setNewTarget] = useState('');
   const [newType, setNewType] = useState(relationshipTypes[0]);
