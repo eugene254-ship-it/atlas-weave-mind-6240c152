@@ -50,6 +50,7 @@ const WorldModel = () => {
   const [showRiskHeatmap, setShowRiskHeatmap] = useState(false);
   const [showBranching, setShowBranching] = useState(false);
   const [showRelEditor, setShowRelEditor] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const [customRelationships, setCustomRelationships] = useState<(WorldRelationship & { isCustom?: boolean })[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
