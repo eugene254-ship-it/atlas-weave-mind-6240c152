@@ -192,6 +192,44 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
         );
       })}
 
+      {/* Custom Relationship Edges */}
+      {customRelationships.filter(r => visibleIds.has(r.source) && visibleIds.has(r.target)).map(r => {
+        const s = getPos(r.source);
+        const t = getPos(r.target);
+        const isActive = selectedEntityId === r.source || selectedEntityId === r.target;
+        return (
+          <g key={r.id}>
+            <line
+              x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+              stroke="hsl(270, 60%, 60%)"
+              strokeWidth={isActive ? 2.5 : 1.5}
+              strokeOpacity={isActive ? 0.8 : 0.5}
+              strokeDasharray="6,3"
+              markerEnd="url(#arrowhead-custom)"
+            />
+            {/* Glow line for custom edges */}
+            <line
+              x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+              stroke="hsl(270, 60%, 60%)"
+              strokeWidth={4}
+              strokeOpacity={0.1}
+            />
+            {/* Label at midpoint */}
+            <text
+              x={(s.x + t.x) / 2}
+              y={(s.y + t.y) / 2 - 6}
+              textAnchor="middle"
+              fill="hsl(270, 60%, 70%)"
+              fontSize="8"
+              fontFamily="'Space Grotesk', sans-serif"
+              opacity={isActive ? 1 : 0.6}
+            >
+              {r.type}
+            </text>
+          </g>
+        );
+      })}
+
       {/* Nodes */}
       {visibleEntities.map(entity => {
         const pos = getPos(entity.id);
