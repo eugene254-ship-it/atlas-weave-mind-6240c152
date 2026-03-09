@@ -1,6 +1,16 @@
 import { useMemo, useCallback, useEffect, useState } from 'react';
 import { entities, relationships, nodePositions, entityTypeConfig, type WorldEntity } from '@/data/worldModelData';
 
+interface CustomRelationship {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  strength: number;
+  confidence: 'high' | 'medium' | 'low';
+  isCustom?: boolean;
+}
+
 interface Props {
   width: number;
   height: number;
@@ -10,6 +20,7 @@ interface Props {
   hoveredEntityId: string | null;
   onEntityHover: (id: string | null) => void;
   showFlowParticles?: boolean;
+  customRelationships?: CustomRelationship[];
 }
 
 const statusColorMap: Record<string, string> = {
