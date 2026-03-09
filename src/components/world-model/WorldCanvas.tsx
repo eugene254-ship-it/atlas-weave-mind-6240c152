@@ -137,6 +137,9 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
         <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="hsl(175, 70%, 50%)" opacity="0.4" />
         </marker>
+        <marker id="arrowhead-custom" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="hsl(270, 60%, 60%)" opacity="0.6" />
+        </marker>
       </defs>
 
       {/* Edges */}

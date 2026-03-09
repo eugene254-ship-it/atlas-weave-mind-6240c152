@@ -79,8 +79,8 @@ export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId
   }, [newSource, newTarget, newType, newStrength, newConfidence]);
 
   const handleDelete = useCallback((id: string) => {
-    setCustomRelationships(prev => prev.filter(r => r.id !== id));
-  }, []);
+    onCustomRelationshipsChange(customRelationships.filter(r => r.id !== id));
+  }, [customRelationships, onCustomRelationshipsChange]);
 
   const strengthColor = (s: number) => {
     if (s >= 0.8) return 'text-status-stable';
