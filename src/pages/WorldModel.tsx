@@ -374,6 +374,11 @@ const WorldModel = () => {
             <PresenceIndicators containerRef={canvasRef} selectedEntityId={selectedEntityId} />
           )}
 
+          {/* Collaboration System */}
+          {viewMode !== 'list' && (
+            <CollaborationSystem onEntitySelect={handleEntitySelect} />
+          )}
+
           {/* Causal Trace Overlay */}
           <AnimatePresence>
             {showCausalTrace && causalChains[showCausalTrace] && (
