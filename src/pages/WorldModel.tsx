@@ -446,6 +446,8 @@ const WorldModel = () => {
         entities={liveEntities}
         selectedEntityId={selectedEntityId}
         onEntitySelect={handleEntitySelect}
+        customRelationships={customRelationships}
+        onCustomRelationshipsChange={setCustomRelationships}
       />
 
       {/* Timeline Scrubber */}
