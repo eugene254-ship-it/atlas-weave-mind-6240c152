@@ -53,7 +53,7 @@ interface Props {
   forks?: TimelineFork[];
 }
 
-export function TimelineScrubber({ selectedEntityId, onEntitySelect }: Props) {
+export function TimelineScrubber({ selectedEntityId, onEntitySelect, forks = [] }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
