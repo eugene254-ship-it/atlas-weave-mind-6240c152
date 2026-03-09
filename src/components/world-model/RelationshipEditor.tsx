@@ -63,7 +63,7 @@ export function RelationshipEditor({ isOpen, onClose, entities, selectedEntityId
   const handleAdd = useCallback(() => {
     if (!newSource || !newTarget || newSource === newTarget) return;
     const id = `custom-r-${Date.now()}`;
-    setCustomRelationships(prev => [...prev, {
+    onCustomRelationshipsChange([...customRelationships, {
       id,
       source: newSource,
       target: newTarget,
