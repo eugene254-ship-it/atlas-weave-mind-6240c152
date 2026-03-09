@@ -1,7 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap } from 'lucide-react';
+import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { WorldEntity, EntityStatus } from '@/data/worldModelData';
+import { entityTypeConfig } from '@/data/worldModelData';
 
 interface Props {
   isOpen: boolean;
@@ -35,6 +39,14 @@ const statusTextColors: Record<EntityStatus, string> = {
   recovering: 'text-status-recovering',
   stable: 'text-status-stable',
 };
+const statusHslColors: Record<EntityStatus, string> = {
+  critical: 'hsl(0, 85%, 55%)',
+  stressed: 'hsl(30, 85%, 55%)',
+  degraded: 'hsl(20, 70%, 45%)',
+  uncertain: 'hsl(45, 75%, 55%)',
+  recovering: 'hsl(200, 70%, 50%)',
+  stable: 'hsl(165, 65%, 45%)',
+};
 
 const entityIcons: Record<string, typeof Droplets> = {
   'river-tana': Droplets,
@@ -49,8 +61,21 @@ const entityIcons: Record<string, typeof Droplets> = {
   'rainfall-east': Droplets,
 };
 
+// Generate mock historical data for sparklines
+function generateHistoricalData(entity: WorldEntity) {
+  const statusScore: Record<EntityStatus, number> = {
+    stable: 90, recovering: 70, uncertain: 55, degraded: 40, stressed: 25, critical: 10,
+  };
+  const baseScore = statusScore[entity.status];
+  return Array.from({ length: 12 }, (_, i) => ({
+    time: i,
+    value: Math.max(5, Math.min(95, baseScore + (Math.random() - 0.5) * 30 + (i - 6) * (Math.random() > 0.5 ? 2 : -2))),
+  }));
+}
+
 export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
@@ -79,6 +104,7 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
         entity: e,
         topRisk: e.risks[0] || 'Unknown risk',
         decliningMetrics: e.metrics.filter(m => m.trend === 'down').length,
+        historicalData: generateHistoricalData(e),
       }));
   }, [entities]);
 
@@ -91,6 +117,158 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
     }));
     return { declining, rising, stable, total: declining + rising + stable };
   }, [entities]);
+
+  // Historical trend data for the overview chart
+  const overallTrendData = useMemo(() => {
+    return Array.from({ length: 24 }, (_, i) => ({
+      time: i,
+      health: Math.max(20, Math.min(95, systemHealth + (Math.random() - 0.5) * 20 + (i - 12) * 0.5)),
+      critical: statusCounts.critical + Math.floor(Math.random() * 2),
+      stressed: statusCounts.stressed + Math.floor(Math.random() * 2),
+    }));
+  }, [systemHealth, statusCounts]);
+
+  const exportPDF = useCallback(() => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Title page
+    doc.setFillColor(15, 18, 22);
+    doc.rect(0, 0, pageWidth, 210, 'F');
+    doc.setTextColor(200, 220, 230);
+    doc.setFontSize(28);
+    doc.text('System Health Report', 20, 40);
+    doc.setFontSize(12);
+    doc.setTextColor(120, 140, 150);
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`, 20, 52);
+    doc.text(`System Health Score: ${systemHealth}/100`, 20, 62);
+    doc.text(`Entities Monitored: ${entities.length}`, 20, 72);
+
+    // Status summary
+    doc.setFontSize(10);
+    let yPos = 85;
+    statusOrder.forEach(status => {
+      if (statusCounts[status] > 0) {
+        doc.text(`${statusLabels[status]}: ${statusCounts[status]}`, 20, yPos);
+        yPos += 8;
+      }
+    });
+
+    // Risk alerts page
+    doc.addPage();
+    doc.setFillColor(15, 18, 22);
+    doc.rect(0, 0, pageWidth, 210, 'F');
+    doc.setTextColor(200, 220, 230);
+    doc.setFontSize(18);
+    doc.text('Priority Risk Alerts', 20, 25);
+
+    const riskData = topRisks.map(({ entity, topRisk, decliningMetrics }) => [
+      entity.name,
+      entityTypeConfig[entity.type].label,
+      entity.status.toUpperCase(),
+      topRisk,
+      `${decliningMetrics} declining`,
+      entity.confidence,
+    ]);
+
+    autoTable(doc, {
+      startY: 35,
+      head: [['Entity', 'Type', 'Status', 'Primary Risk', 'Metrics', 'Confidence']],
+      body: riskData,
+      styles: {
+        fillColor: [20, 24, 30],
+        textColor: [180, 195, 210],
+        fontSize: 8,
+        cellPadding: 3,
+      },
+      headStyles: {
+        fillColor: [50, 30, 30],
+        textColor: [230, 120, 100],
+        fontSize: 9,
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: { fillColor: [25, 30, 38] },
+    });
+
+    // All entities page
+    doc.addPage();
+    doc.setFillColor(15, 18, 22);
+    doc.rect(0, 0, pageWidth, 210, 'F');
+    doc.setTextColor(200, 220, 230);
+    doc.setFontSize(18);
+    doc.text('All Monitored Entities', 20, 25);
+
+    autoTable(doc, {
+      startY: 35,
+      head: [['Entity', 'Type', 'Status', 'Confidence', 'Location', 'Key Metrics']],
+      body: entities.map(e => [
+        e.name,
+        entityTypeConfig[e.type].label,
+        e.status.toUpperCase(),
+        e.confidence,
+        e.location || 'Global',
+        e.metrics.slice(0, 2).map(m => `${m.label}: ${m.value}`).join(', '),
+      ]),
+      styles: {
+        fillColor: [20, 24, 30],
+        textColor: [180, 195, 210],
+        fontSize: 8,
+        cellPadding: 3,
+      },
+      headStyles: {
+        fillColor: [30, 40, 50],
+        textColor: [100, 210, 190],
+        fontSize: 9,
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: { fillColor: [25, 30, 38] },
+    });
+
+    // Metric trends page
+    doc.addPage();
+    doc.setFillColor(15, 18, 22);
+    doc.rect(0, 0, pageWidth, 210, 'F');
+    doc.setTextColor(200, 220, 230);
+    doc.setFontSize(18);
+    doc.text('Metric Trends Summary', 20, 25);
+    doc.setFontSize(12);
+    doc.text(`Total Metrics: ${metricSummary.total}`, 20, 40);
+    doc.text(`Declining: ${metricSummary.declining} (${Math.round(metricSummary.declining / metricSummary.total * 100)}%)`, 20, 50);
+    doc.text(`Rising: ${metricSummary.rising} (${Math.round(metricSummary.rising / metricSummary.total * 100)}%)`, 20, 60);
+    doc.text(`Stable: ${metricSummary.stable} (${Math.round(metricSummary.stable / metricSummary.total * 100)}%)`, 20, 70);
+
+    doc.save('system-health-report.pdf');
+    setShowExportMenu(false);
+  }, [entities, systemHealth, statusCounts, topRisks, metricSummary]);
+
+  const exportCSV = useCallback(() => {
+    const headers = ['Entity', 'Type', 'Status', 'Confidence', 'Location', 'Risks', 'Metrics'];
+    const rows = entities.map(e => [
+      e.name,
+      entityTypeConfig[e.type].label,
+      e.status,
+      e.confidence,
+      e.location || 'Global',
+      e.risks.join('; '),
+      e.metrics.map(m => `${m.label}: ${m.value} (${m.trend})`).join('; '),
+    ]);
+
+    const csvContent = [
+      `System Health Report - Generated ${new Date().toISOString()}`,
+      `System Health Score: ${systemHealth}/100`,
+      `Total Entities: ${entities.length}`,
+      '',
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'system-health-report.csv';
+    link.click();
+    setShowExportMenu(false);
+  }, [entities, systemHealth]);
 
   return (
     <AnimatePresence>
@@ -122,15 +300,52 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                   </span>
                 </div>
               </div>
-              <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Export button */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export
+                  </button>
+                  <AnimatePresence>
+                    {showExportMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        className="absolute right-0 top-full mt-1 z-10 rounded-lg border border-border/50 bg-card shadow-xl"
+                      >
+                        <button
+                          onClick={exportPDF}
+                          className="flex w-full items-center gap-2 px-4 py-2.5 font-mono text-[10px] text-foreground hover:bg-muted/40 rounded-t-lg"
+                        >
+                          <FileText className="h-3.5 w-3.5 text-status-critical" />
+                          Export as PDF
+                        </button>
+                        <button
+                          onClick={exportCSV}
+                          className="flex w-full items-center gap-2 px-4 py-2.5 font-mono text-[10px] text-foreground hover:bg-muted/40 rounded-b-lg"
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5 text-status-stable" />
+                          Export as CSV
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-auto p-4 space-y-4">
               {/* Top row: Health score + Status distribution + Metric trends */}
               <div className="grid grid-cols-3 gap-4">
-                {/* System Health Score */}
+                {/* System Health Score with sparkline */}
                 <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
                   <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">System Health</span>
                   <div className="mt-2 flex items-end gap-2">
@@ -145,11 +360,21 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                       transition={{ duration: 1, ease: 'easeOut' }}
                     />
                   </div>
-                  <p className="mt-2 font-mono text-[9px] text-muted-foreground">
-                    {systemHealth >= 70 ? 'Systems operating within acceptable parameters' :
-                     systemHealth >= 40 ? 'Multiple systems under stress — monitor closely' :
-                     'Critical conditions detected — immediate attention required'}
-                  </p>
+                  {/* Sparkline trend */}
+                  <div className="mt-3 h-12">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={overallTrendData}>
+                        <Line
+                          type="monotone"
+                          dataKey="health"
+                          stroke={systemHealth >= 70 ? statusHslColors.stable : systemHealth >= 40 ? statusHslColors.stressed : statusHslColors.critical}
+                          strokeWidth={1.5}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="mt-1 font-mono text-[8px] text-muted-foreground">24-hour trend</p>
                 </div>
 
                 {/* Status Distribution */}
@@ -172,49 +397,46 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                   </div>
                 </div>
 
-                {/* Metric Trends */}
+                {/* Metric Trends with mini chart */}
                 <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
                   <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Metric Trends</span>
-                  <div className="mt-3 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-status-critical/10">
-                        <TrendingDown className="h-4 w-4 text-status-critical" />
-                      </div>
-                      <div>
-                        <span className="font-display text-lg font-bold text-status-critical">{metricSummary.declining}</span>
-                        <span className="ml-1 font-mono text-[9px] text-muted-foreground">declining</span>
-                      </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <div className="rounded-lg bg-status-critical/10 p-2 text-center">
+                      <TrendingDown className="mx-auto h-4 w-4 text-status-critical" />
+                      <span className="block font-display text-lg font-bold text-status-critical">{metricSummary.declining}</span>
+                      <span className="font-mono text-[7px] text-muted-foreground">declining</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-status-stressed/10">
-                        <TrendingUp className="h-4 w-4 text-status-stressed" />
-                      </div>
-                      <div>
-                        <span className="font-display text-lg font-bold text-status-stressed">{metricSummary.rising}</span>
-                        <span className="ml-1 font-mono text-[9px] text-muted-foreground">rising</span>
-                      </div>
+                    <div className="rounded-lg bg-status-stressed/10 p-2 text-center">
+                      <TrendingUp className="mx-auto h-4 w-4 text-status-stressed" />
+                      <span className="block font-display text-lg font-bold text-status-stressed">{metricSummary.rising}</span>
+                      <span className="font-mono text-[7px] text-muted-foreground">rising</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/30">
-                        <Minus className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <span className="font-display text-lg font-bold text-muted-foreground">{metricSummary.stable}</span>
-                        <span className="ml-1 font-mono text-[9px] text-muted-foreground">stable</span>
-                      </div>
+                    <div className="rounded-lg bg-muted/30 p-2 text-center">
+                      <Minus className="mx-auto h-4 w-4 text-muted-foreground" />
+                      <span className="block font-display text-lg font-bold text-muted-foreground">{metricSummary.stable}</span>
+                      <span className="font-mono text-[7px] text-muted-foreground">stable</span>
                     </div>
+                  </div>
+                  {/* Mini trend breakdown chart */}
+                  <div className="mt-3 h-10">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={overallTrendData}>
+                        <Line type="monotone" dataKey="critical" stroke={statusHslColors.critical} strokeWidth={1} dot={false} />
+                        <Line type="monotone" dataKey="stressed" stroke={statusHslColors.stressed} strokeWidth={1} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               </div>
 
-              {/* Risk alerts */}
+              {/* Risk alerts with sparklines */}
               <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-status-critical" />
                   <span className="font-mono text-[9px] uppercase tracking-wider text-status-critical">Priority Alerts</span>
                 </div>
                 <div className="mt-3 space-y-2">
-                  {topRisks.map(({ entity, topRisk, decliningMetrics }) => {
+                  {topRisks.map(({ entity, topRisk, decliningMetrics, historicalData }) => {
                     const Icon = entityIcons[entity.id] || Activity;
                     return (
                       <motion.div
@@ -240,6 +462,20 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                           </div>
                           <span className="text-[9px] text-muted-foreground">{topRisk}</span>
                         </div>
+                        {/* Sparkline */}
+                        <div className="h-8 w-20 shrink-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={historicalData}>
+                              <Line
+                                type="monotone"
+                                dataKey="value"
+                                stroke={statusHslColors[entity.status]}
+                                strokeWidth={1.5}
+                                dot={false}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
                         <div className="shrink-0 text-right">
                           <div className="font-mono text-[9px] text-muted-foreground">
                             {decliningMetrics} metric{decliningMetrics !== 1 ? 's' : ''} declining
@@ -254,12 +490,13 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                 </div>
               </div>
 
-              {/* Entity grid - compact cards */}
+              {/* Entity grid - compact cards with mini sparklines */}
               <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
                 <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">All Entities</span>
                 <div className="mt-3 grid grid-cols-5 gap-2">
                   {entities.map(entity => {
                     const Icon = entityIcons[entity.id] || Activity;
+                    const sparkData = generateHistoricalData(entity);
                     return (
                       <button
                         key={entity.id}
@@ -273,12 +510,19 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                         <div className="mt-2 truncate font-mono text-[9px] font-medium text-foreground group-hover:text-primary">
                           {entity.name}
                         </div>
-                        <div className="mt-1 flex items-center gap-1">
-                          {entity.metrics.slice(0, 2).map((m, i) => (
-                            <span key={i} className="truncate font-mono text-[7px] text-muted-foreground">
-                              {m.label}: {m.value}
-                            </span>
-                          ))}
+                        {/* Mini sparkline */}
+                        <div className="mt-1 h-6">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={sparkData}>
+                              <Line
+                                type="monotone"
+                                dataKey="value"
+                                stroke={statusHslColors[entity.status]}
+                                strokeWidth={1}
+                                dot={false}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
                         </div>
                       </button>
                     );
