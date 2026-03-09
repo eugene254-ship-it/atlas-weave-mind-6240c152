@@ -22,10 +22,12 @@ import { RiskHeatmap } from '@/components/world-model/RiskHeatmap';
 import { ScenarioBranching } from '@/components/world-model/ScenarioBranching';
 import { RelationshipEditor } from '@/components/world-model/RelationshipEditor';
 import { PresenceIndicators } from '@/components/world-model/PresenceIndicators';
+import { CollaborationSystem } from '@/components/world-model/CollaborationSystem';
+import { DashboardOverview } from '@/components/world-model/DashboardOverview';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame, Link2, Split } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame, Link2, Split, LayoutDashboard } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
@@ -48,6 +50,7 @@ const WorldModel = () => {
   const [showRiskHeatmap, setShowRiskHeatmap] = useState(false);
   const [showBranching, setShowBranching] = useState(false);
   const [showRelEditor, setShowRelEditor] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const [customRelationships, setCustomRelationships] = useState<(WorldRelationship & { isCustom?: boolean })[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
@@ -272,6 +275,14 @@ const WorldModel = () => {
               <Link2 className="h-3 w-3" />
               <span className="hidden lg:inline">Links</span>
             </button>
+            <button
+              onClick={() => setShowDashboard(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Dashboard Overview"
+            >
+              <LayoutDashboard className="h-3 w-3" />
+              <span className="hidden lg:inline">Dashboard</span>
+            </button>
             <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
 
@@ -361,6 +372,11 @@ const WorldModel = () => {
           {/* Presence Indicators */}
           {viewMode !== 'list' && (
             <PresenceIndicators containerRef={canvasRef} selectedEntityId={selectedEntityId} />
+          )}
+
+          {/* Collaboration System */}
+          {viewMode !== 'list' && (
+            <CollaborationSystem onEntitySelect={handleEntitySelect} />
           )}
 
           {/* Causal Trace Overlay */}
@@ -453,6 +469,14 @@ const WorldModel = () => {
         onEntitySelect={handleEntitySelect}
         customRelationships={customRelationships}
         onCustomRelationshipsChange={setCustomRelationships}
+      />
+
+      {/* Dashboard Overview */}
+      <DashboardOverview
+        isOpen={showDashboard}
+        onClose={() => setShowDashboard(false)}
+        entities={liveEntities}
+        onEntitySelect={handleEntitySelect}
       />
 
       {/* Timeline Scrubber */}
