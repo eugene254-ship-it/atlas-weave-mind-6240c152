@@ -22,10 +22,12 @@ import { RiskHeatmap } from '@/components/world-model/RiskHeatmap';
 import { ScenarioBranching } from '@/components/world-model/ScenarioBranching';
 import { RelationshipEditor } from '@/components/world-model/RelationshipEditor';
 import { PresenceIndicators } from '@/components/world-model/PresenceIndicators';
+import { CollaborationSystem } from '@/components/world-model/CollaborationSystem';
+import { DashboardOverview } from '@/components/world-model/DashboardOverview';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame, Link2, Split } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame, Link2, Split, LayoutDashboard } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
