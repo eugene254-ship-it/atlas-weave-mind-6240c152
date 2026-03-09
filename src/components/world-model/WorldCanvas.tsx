@@ -54,7 +54,7 @@ interface Particle {
   color: string;
 }
 
-export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true }: Props) {
+export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true, customRelationships = [] }: Props) {
   const pad = 60;
   const w = width - pad * 2;
   const h = height - pad * 2;
