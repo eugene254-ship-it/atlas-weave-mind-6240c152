@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { entities as baseEntities, causalChains, type EntityType } from '@/data/worldModelData';
+import { entities as baseEntities, causalChains, type EntityType, type WorldRelationship, type ConfidenceLevel } from '@/data/worldModelData';
 import { WorldCanvas } from '@/components/world-model/WorldCanvas';
 import { GeoMapLayer } from '@/components/world-model/GeoMapLayer';
 import { EntityDetailPanel } from '@/components/world-model/EntityDetailPanel';
