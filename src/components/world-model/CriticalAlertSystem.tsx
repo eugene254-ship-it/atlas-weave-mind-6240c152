@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, X, Volume2, VolumeX } from 'lucide-react';
-import { type EntityStatus } from '@/data/worldModelData';
+import { AlertTriangle, AlertCircle, X, Volume2, VolumeX } from 'lucide-react';
 
 interface SimulationTick {
   entityId: string;
@@ -12,11 +11,14 @@ interface SimulationTick {
   timestamp: number;
 }
 
-interface CriticalAlert {
+type Severity = 'critical' | 'stressed';
+
+interface StatusAlert {
   id: string;
   entityId: string;
   entityName: string;
   fromStatus: string;
+  severity: Severity;
   timestamp: number;
 }
 
@@ -26,57 +28,70 @@ interface Props {
   onEntitySelect: (id: string) => void;
 }
 
-// Generate a short beep using Web Audio API
-function playAlertSound() {
+const STABLE_LIKE = new Set(['stable', 'recovering', 'uncertain']);
+
+// Generate a short beep using Web Audio API. Critical = higher pitch + longer.
+function playAlertSound(severity: Severity) {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.frequency.value = 880;
+    osc.frequency.value = severity === 'critical' ? 880 : 540;
     osc.type = 'sine';
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    const dur = severity === 'critical' ? 0.4 : 0.25;
+    gain.gain.setValueAtTime(severity === 'critical' ? 0.15 : 0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.4);
-    setTimeout(() => ctx.close(), 500);
+    osc.stop(ctx.currentTime + dur);
+    setTimeout(() => ctx.close(), (dur + 0.1) * 1000);
   } catch {
     // Audio not available
   }
 }
 
 export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Props) {
-  const [alerts, setAlerts] = useState<CriticalAlert[]>([]);
-  const [flashActive, setFlashActive] = useState(false);
+  const [alerts, setAlerts] = useState<StatusAlert[]>([]);
+  const [flashSeverity, setFlashSeverity] = useState<Severity | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const processedRef = useRef(new Set<string>());
 
-  // Watch for critical transitions
+  // Watch for stable→stressed and stable→critical (or any escalation into stressed/critical)
   useEffect(() => {
-    const criticalTicks = ticks.filter(
-      t => t.field === 'status' && t.newValue === 'critical' && t.oldValue !== 'critical'
-    );
+    const escalations = ticks.filter(t => {
+      if (t.field !== 'status') return false;
+      const wasOk = STABLE_LIKE.has(t.oldValue);
+      const isCritical = t.newValue === 'critical' && t.oldValue !== 'critical';
+      const isStressed = t.newValue === 'stressed' && wasOk;
+      return isCritical || isStressed;
+    });
 
-    const newAlerts: CriticalAlert[] = [];
-    for (const tick of criticalTicks) {
-      const key = `${tick.entityId}-${tick.timestamp}`;
+    const newAlerts: StatusAlert[] = [];
+    let highest: Severity | null = null;
+
+    for (const tick of escalations) {
+      const key = `${tick.entityId}-${tick.timestamp}-${tick.newValue}`;
       if (processedRef.current.has(key)) continue;
       processedRef.current.add(key);
+      const severity: Severity = tick.newValue === 'critical' ? 'critical' : 'stressed';
+      if (severity === 'critical') highest = 'critical';
+      else if (highest !== 'critical') highest = 'stressed';
       newAlerts.push({
         id: key,
         entityId: tick.entityId,
         entityName: entityNames[tick.entityId] || tick.entityId.replace(/-/g, ' '),
         fromStatus: tick.oldValue,
+        severity,
         timestamp: tick.timestamp,
       });
     }
 
     if (newAlerts.length > 0) {
       setAlerts(prev => [...newAlerts, ...prev].slice(0, 10));
-      setFlashActive(true);
-      if (soundEnabled) playAlertSound();
-      setTimeout(() => setFlashActive(false), 600);
+      setFlashSeverity(highest);
+      if (soundEnabled && highest) playAlertSound(highest);
+      setTimeout(() => setFlashSeverity(null), 600);
     }
   }, [ticks, entityNames, soundEnabled]);
 
@@ -88,18 +103,28 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Prop
     setAlerts([]);
   }, []);
 
+  const criticalCount = alerts.filter(a => a.severity === 'critical').length;
+  const stressedCount = alerts.length - criticalCount;
+  const headerColor = criticalCount > 0 ? 'text-destructive' : 'text-status-stressed';
+
   return (
     <>
       {/* Screen flash overlay */}
       <AnimatePresence>
-        {flashActive && (
+        {flashSeverity && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="pointer-events-none fixed inset-0 z-[60] border-4 border-destructive/60"
-            style={{ boxShadow: 'inset 0 0 100px rgba(239, 68, 68, 0.15)' }}
+            className={`pointer-events-none fixed inset-0 z-[60] border-4 ${
+              flashSeverity === 'critical' ? 'border-destructive/60' : 'border-status-stressed/50'
+            }`}
+            style={{
+              boxShadow: flashSeverity === 'critical'
+                ? 'inset 0 0 100px rgba(239, 68, 68, 0.15)'
+                : 'inset 0 0 80px rgba(234, 130, 50, 0.12)',
+            }}
           />
         )}
       </AnimatePresence>
@@ -109,8 +134,10 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Prop
         <div className="fixed right-4 top-16 z-50 flex w-80 flex-col gap-2">
           {/* Controls */}
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-destructive">
-              {alerts.length} Critical Alert{alerts.length > 1 ? 's' : ''}
+            <span className={`font-mono text-[9px] uppercase tracking-wider ${headerColor}`}>
+              {criticalCount > 0 && `${criticalCount} Critical`}
+              {criticalCount > 0 && stressedCount > 0 && ' · '}
+              {stressedCount > 0 && `${stressedCount} Stressed`}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -130,40 +157,54 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Prop
           </div>
 
           <AnimatePresence initial={false}>
-            {alerts.slice(0, 4).map(alert => (
-              <motion.div
-                key={alert.id}
-                initial={{ opacity: 0, x: 40, scale: 0.95 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 40, scale: 0.95 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                className="group flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 backdrop-blur-sm"
-              >
-                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-destructive/20">
-                  <AlertTriangle className="h-3 w-3 text-destructive" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <button
-                    onClick={() => onEntitySelect(alert.entityId)}
-                    className="block truncate font-mono text-xs font-medium text-foreground transition-colors hover:text-primary"
-                  >
-                    {alert.entityName}
-                  </button>
-                  <span className="font-mono text-[9px] text-muted-foreground">
-                    Transitioned to <span className="text-destructive font-semibold">CRITICAL</span> from {alert.fromStatus}
-                  </span>
-                  <span className="ml-2 font-mono text-[8px] text-muted-foreground/60">
-                    {Math.round((Date.now() - alert.timestamp) / 1000)}s ago
-                  </span>
-                </div>
-                <button
-                  onClick={() => dismissAlert(alert.id)}
-                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-all hover:text-foreground group-hover:opacity-100"
+            {alerts.slice(0, 4).map(alert => {
+              const isCritical = alert.severity === 'critical';
+              const Icon = isCritical ? AlertTriangle : AlertCircle;
+              return (
+                <motion.div
+                  key={alert.id}
+                  initial={{ opacity: 0, x: 40, scale: 0.95 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 40, scale: 0.95 }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  className={`group flex items-start gap-2.5 rounded-lg border p-3 backdrop-blur-sm ${
+                    isCritical
+                      ? 'border-destructive/30 bg-destructive/10'
+                      : 'border-status-stressed/30 bg-status-stressed/10'
+                  }`}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </motion.div>
-            ))}
+                  <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                    isCritical ? 'bg-destructive/20' : 'bg-status-stressed/20'
+                  }`}>
+                    <Icon className={`h-3 w-3 ${isCritical ? 'text-destructive' : 'text-status-stressed'}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <button
+                      onClick={() => onEntitySelect(alert.entityId)}
+                      className="block truncate font-mono text-xs font-medium text-foreground transition-colors hover:text-primary"
+                    >
+                      {alert.entityName}
+                    </button>
+                    <span className="font-mono text-[9px] text-muted-foreground">
+                      Transitioned to{' '}
+                      <span className={`font-semibold ${isCritical ? 'text-destructive' : 'text-status-stressed'}`}>
+                        {alert.severity.toUpperCase()}
+                      </span>
+                      {' '}from {alert.fromStatus}
+                    </span>
+                    <span className="ml-2 font-mono text-[8px] text-muted-foreground/60">
+                      {Math.round((Date.now() - alert.timestamp) / 1000)}s ago
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => dismissAlert(alert.id)}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-all hover:text-foreground group-hover:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
       )}
