@@ -343,7 +343,165 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-4 space-y-4">
+            <div className="relative flex-1 overflow-auto p-4 space-y-4">
+              {/* Drill-down overlay */}
+              <AnimatePresence>
+                {drillStatus && (() => {
+                  const drillEntities = entities.filter(e => e.status === drillStatus);
+                  const drillSeries = Array.from({ length: 24 }, (_, i) => {
+                    const point: Record<string, number | string> = { time: `T-${23 - i}h` };
+                    drillEntities.forEach(e => {
+                      const data = generateHistoricalData(e);
+                      const v = data[i % data.length]?.value ?? 50;
+                      point[e.name] = Math.round(v);
+                    });
+                    return point;
+                  });
+                  const avgScore = Math.round(
+                    drillEntities.reduce((s, e) => {
+                      const sc: Record<EntityStatus, number> = { stable: 90, recovering: 70, uncertain: 55, degraded: 40, stressed: 25, critical: 10 };
+                      return s + sc[e.status];
+                    }, 0) / Math.max(1, drillEntities.length)
+                  );
+                  const palette = ['hsl(200,70%,55%)', 'hsl(280,60%,60%)', 'hsl(45,75%,55%)', 'hsl(165,65%,45%)', 'hsl(0,75%,55%)', 'hsl(30,85%,55%)', 'hsl(140,55%,50%)', 'hsl(320,60%,60%)'];
+                  return (
+                    <motion.div
+                      key={drillStatus}
+                      initial={{ opacity: 0, x: 24 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 24 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute inset-0 z-10 flex flex-col bg-card"
+                    >
+                      <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            onClick={() => setDrillStatus(null)}
+                            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                          <div className={`h-2.5 w-2.5 rounded-full ${statusColors[drillStatus]}`} />
+                          <h3 className="font-display text-sm font-semibold text-foreground">
+                            {statusLabels[drillStatus]} Entities
+                          </h3>
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            {drillEntities.length} of {entities.length} · avg score {avgScore}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-auto p-4 space-y-4">
+                        {/* Combined historical chart */}
+                        <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
+                          <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                            24-Hour Health History — {statusLabels[drillStatus]} cohort
+                          </span>
+                          <div className="mt-3 h-56">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={drillSeries} margin={{ top: 5, right: 12, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} interval={3} />
+                                <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} domain={[0, 100]} />
+                                <Tooltip
+                                  contentStyle={{
+                                    background: 'hsl(var(--card))',
+                                    border: '1px solid hsl(var(--border))',
+                                    fontSize: 10,
+                                    fontFamily: 'monospace',
+                                  }}
+                                />
+                                {drillEntities.map((e, idx) => (
+                                  <Line
+                                    key={e.id}
+                                    type="monotone"
+                                    dataKey={e.name}
+                                    stroke={palette[idx % palette.length]}
+                                    strokeWidth={1.5}
+                                    dot={false}
+                                  />
+                                ))}
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+
+                        {/* Per-entity breakdown cards */}
+                        <div className="grid grid-cols-2 gap-3">
+                          {drillEntities.map((entity, idx) => {
+                            const Icon = entityIcons[entity.id] || Activity;
+                            const histData = generateHistoricalData(entity);
+                            const declining = entity.metrics.filter(m => m.trend === 'down').length;
+                            const rising = entity.metrics.filter(m => m.trend === 'up').length;
+                            return (
+                              <button
+                                key={entity.id}
+                                onClick={() => { onEntitySelect(entity.id); onClose(); }}
+                                className="rounded-lg border border-border/40 bg-muted/10 p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${statusColors[entity.status]}/15`}
+                                    style={{ backgroundColor: `${statusHslColors[entity.status]}22` }}>
+                                    <Icon className={`h-4 w-4 ${statusTextColors[entity.status]}`} />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-mono text-[11px] font-medium text-foreground truncate">{entity.name}</div>
+                                    <div className="font-mono text-[9px] text-muted-foreground">
+                                      {entityTypeConfig[entity.type].label} · {entity.location || 'Global'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 h-16">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={histData}>
+                                      <defs>
+                                        <linearGradient id={`grad-${entity.id}`} x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="0%" stopColor={palette[idx % palette.length]} stopOpacity={0.4} />
+                                          <stop offset="100%" stopColor={palette[idx % palette.length]} stopOpacity={0} />
+                                        </linearGradient>
+                                      </defs>
+                                      <Area
+                                        type="monotone"
+                                        dataKey="value"
+                                        stroke={palette[idx % palette.length]}
+                                        strokeWidth={1.5}
+                                        fill={`url(#grad-${entity.id})`}
+                                      />
+                                    </AreaChart>
+                                  </ResponsiveContainer>
+                                </div>
+
+                                <div className="mt-2 flex items-center justify-between font-mono text-[9px]">
+                                  <span className="text-muted-foreground">
+                                    Risk: <span className="text-foreground/80">{entity.risks[0] || '—'}</span>
+                                  </span>
+                                  <span className="flex items-center gap-2">
+                                    <span className="flex items-center gap-0.5 text-status-critical">
+                                      <TrendingDown className="h-2.5 w-2.5" />{declining}
+                                    </span>
+                                    <span className="flex items-center gap-0.5 text-status-stressed">
+                                      <TrendingUp className="h-2.5 w-2.5" />{rising}
+                                    </span>
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                          {drillEntities.length === 0 && (
+                            <div className="col-span-2 rounded-lg border border-dashed border-border/40 p-6 text-center">
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                No entities currently in {statusLabels[drillStatus].toLowerCase()} state
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })()}
+              </AnimatePresence>
+
               {/* Top row: Health score + Status distribution + Metric trends */}
               <div className="grid grid-cols-3 gap-4">
                 {/* System Health Score with sparkline */}
