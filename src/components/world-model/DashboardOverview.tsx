@@ -76,6 +76,7 @@ function generateHistoricalData(entity: WorldEntity) {
 export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [drillStatus, setDrillStatus] = useState<EntityStatus | null>(null);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
