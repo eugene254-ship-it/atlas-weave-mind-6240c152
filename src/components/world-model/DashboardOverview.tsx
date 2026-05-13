@@ -380,12 +380,19 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
 
                 {/* Status Distribution */}
                 <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
-                  <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Status Distribution</span>
-                  <div className="mt-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Status Distribution</span>
+                    <span className="font-mono text-[8px] text-muted-foreground/60">click to drill in</span>
+                  </div>
+                  <div className="mt-3 space-y-1">
                     {statusOrder.filter(s => statusCounts[s] > 0).map(status => (
-                      <div key={status} className="flex items-center gap-2">
+                      <button
+                        key={status}
+                        onClick={() => setDrillStatus(status)}
+                        className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-muted/30"
+                      >
                         <div className={`h-2 w-2 rounded-full ${statusColors[status]}`} />
-                        <span className="flex-1 font-mono text-[10px] text-foreground/70">{statusLabels[status]}</span>
+                        <span className="flex-1 text-left font-mono text-[10px] text-foreground/70">{statusLabels[status]}</span>
                         <span className={`font-mono text-xs font-medium ${statusTextColors[status]}`}>{statusCounts[status]}</span>
                         <div className="h-1.5 w-16 rounded-full bg-muted/40">
                           <div
@@ -393,7 +400,8 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                             style={{ width: `${(statusCounts[status] / entities.length) * 100}%` }}
                           />
                         </div>
-                      </div>
+                        <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                      </button>
                     ))}
                   </div>
                 </div>
