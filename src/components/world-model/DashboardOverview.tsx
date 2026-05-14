@@ -85,6 +85,30 @@ const RISK_WEIGHT: Record<EntityStatus, number> = {
   critical: 100, stressed: 75, degraded: 60, uncertain: 40, recovering: 25, stable: 10,
 };
 
+interface DrillPreset {
+  id: string;
+  name: string;
+  status: EntityStatus;
+  range: RangeKey;
+  type: EntityType | 'all';
+  search: string;
+  createdAt: number;
+}
+
+const PRESETS_KEY = 'atlas:drill-presets';
+
+function loadPresets(): DrillPreset[] {
+  try {
+    const raw = localStorage.getItem(PRESETS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {/* ignore */}
+  return [];
+}
+
+function savePresets(presets: DrillPreset[]) {
+  try { localStorage.setItem(PRESETS_KEY, JSON.stringify(presets)); } catch {/* ignore */}
+}
+
 export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -93,6 +117,47 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
   const [drillSearch, setDrillSearch] = useState('');
   const [drillType, setDrillType] = useState<EntityType | 'all'>('all');
   const [showDrillExport, setShowDrillExport] = useState(false);
+  const [presets, setPresets] = useState<DrillPreset[]>(() => loadPresets());
+  const [showPresetsMenu, setShowPresetsMenu] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [shareCopied, setShareCopied] = useState(false);
+  const [perEntityMenu, setPerEntityMenu] = useState<string | null>(null);
+
+  // Load drill state from URL on open
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ds = params.get('drill') as EntityStatus | null;
+      if (ds && ['stable', 'stressed', 'critical', 'recovering', 'uncertain', 'degraded'].includes(ds)) {
+        setDrillStatus(ds);
+        const r = params.get('range') as RangeKey | null;
+        if (r && (r === '24h' || r === '7d' || r === '30d')) setDrillRange(r);
+        const t = params.get('type');
+        if (t) setDrillType(t as EntityType | 'all');
+        const q = params.get('q');
+        if (q) setDrillSearch(q);
+      }
+    } catch {/* ignore */}
+  }, [isOpen]);
+
+  // Sync drill state to URL
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (drillStatus) {
+        params.set('drill', drillStatus);
+        params.set('range', drillRange);
+        params.set('type', drillType);
+        if (drillSearch) params.set('q', drillSearch); else params.delete('q');
+      } else {
+        params.delete('drill'); params.delete('range'); params.delete('type'); params.delete('q');
+      }
+      const qs = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`);
+    } catch {/* ignore */}
+  }, [isOpen, drillStatus, drillRange, drillType, drillSearch]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
