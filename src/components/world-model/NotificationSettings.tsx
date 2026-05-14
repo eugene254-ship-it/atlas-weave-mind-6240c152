@@ -260,3 +260,91 @@ function HourSelect({ label, value, onChange }: { label: string; value: number; 
     </label>
   );
 }
+
+function fmtHour(h: number) { return `${String(h).padStart(2, '0')}:00`; }
+
+function QuietHoursPreview({ settings }: { settings: NotificationSettings }) {
+  const now = new Date();
+  const active = isInQuietHours(settings, now);
+  // Compute next transition
+  const h = now.getHours();
+  let nextLabel = '';
+  if (active) {
+    nextLabel = `Sound resumes at ${fmtHour(settings.quietEnd)}`;
+  } else {
+    nextLabel = `Quiet starts at ${fmtHour(settings.quietStart)}`;
+  }
+  // 24-hour timeline blocks
+  const blocks = Array.from({ length: 24 }, (_, i) => {
+    let inQuiet: boolean;
+    if (settings.quietStart === settings.quietEnd) inQuiet = false;
+    else if (settings.quietStart < settings.quietEnd) inQuiet = i >= settings.quietStart && i < settings.quietEnd;
+    else inQuiet = i >= settings.quietStart || i < settings.quietEnd;
+    return { hour: i, quiet: inQuiet, current: i === h };
+  });
+  return (
+    <div className="mt-3 rounded-md border border-border/40 bg-muted/10 p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          {active ? <BellOff className="h-3 w-3 text-status-stable" /> : <Bell className="h-3 w-3 text-foreground/70" />}
+          Now: {active ? 'Quiet' : 'Active'}
+        </span>
+        <span className="font-mono text-[9px] text-muted-foreground">{nextLabel}</span>
+      </div>
+      <div className="mt-2 flex h-4 overflow-hidden rounded-sm border border-border/40">
+        {blocks.map(b => (
+          <div
+            key={b.hour}
+            title={`${fmtHour(b.hour)} ${b.quiet ? '· quiet' : '· alerts on'}`}
+            className={`relative flex-1 ${b.quiet ? 'bg-muted/60' : 'bg-primary/30'}`}
+          >
+            {b.current && <div className="absolute inset-y-0 left-0 w-px bg-foreground" />}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between font-mono text-[8px] text-muted-foreground/60">
+        <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+      </div>
+    </div>
+  );
+}
+
+function TestButton({ severity, disabled, quiet, soundOff, onPlay }: {
+  severity: Severity; disabled: boolean; quiet: boolean; soundOff: boolean; onPlay: () => void;
+}) {
+  const [pulsing, setPulsing] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const isCritical = severity === 'critical';
+  const Icon = isCritical ? AlertTriangle : AlertCircle;
+  const handleClick = () => {
+    if (!soundOff && !quiet) onPlay();
+    setPulsing(true);
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setPulsing(false), 600);
+  };
+  useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
+
+  const muted = disabled || soundOff || quiet;
+  return (
+    <button
+      onClick={handleClick}
+      disabled={disabled}
+      className={`group relative flex flex-col items-start gap-0.5 rounded-md border p-2.5 text-left transition-all ${
+        disabled
+          ? 'cursor-not-allowed border-border/30 bg-muted/10 opacity-50'
+          : isCritical
+            ? 'border-status-critical/30 bg-status-critical/5 hover:bg-status-critical/10'
+            : 'border-status-stressed/30 bg-status-stressed/5 hover:bg-status-stressed/10'
+      } ${pulsing ? 'ring-2 ring-offset-1 ring-offset-card ' + (isCritical ? 'ring-status-critical/60' : 'ring-status-stressed/60') : ''}`}
+    >
+      <span className="flex items-center gap-1.5">
+        <Icon className={`h-3 w-3 ${isCritical ? 'text-status-critical' : 'text-status-stressed'}`} />
+        <span className="font-mono text-[10px] font-medium text-foreground">Test {severity}</span>
+        <Play className="h-2.5 w-2.5 text-muted-foreground" />
+      </span>
+      <span className="font-mono text-[8px] text-muted-foreground">
+        {disabled ? 'Severity disabled' : muted ? (quiet ? 'Quiet hours · silent' : 'Sound off · silent') : `${isCritical ? '880' : '540'}Hz tone`}
+      </span>
+    </button>
+  );
+}
