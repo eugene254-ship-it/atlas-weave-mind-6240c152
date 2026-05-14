@@ -53,10 +53,13 @@ function playAlertSound(severity: Severity) {
   }
 }
 
-export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Props) {
+export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect, settings }: Props) {
   const [alerts, setAlerts] = useState<StatusAlert[]>([]);
   const [flashSeverity, setFlashSeverity] = useState<Severity | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabledLocal, setSoundEnabledLocal] = useState(true);
+  const soundEnabled = (settings?.soundEnabled ?? true) && soundEnabledLocal;
+  const allowStressed = settings?.alertOnStressed ?? true;
+  const allowCritical = settings?.alertOnCritical ?? true;
   const processedRef = useRef(new Set<string>());
 
   // Watch for stable→stressed and stable→critical (or any escalation into stressed/critical)
