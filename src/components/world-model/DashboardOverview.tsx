@@ -1,6 +1,6 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Filter } from 'lucide-react';
+import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Filter, Bookmark, Share2, Check, Trash2 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -85,6 +85,30 @@ const RISK_WEIGHT: Record<EntityStatus, number> = {
   critical: 100, stressed: 75, degraded: 60, uncertain: 40, recovering: 25, stable: 10,
 };
 
+interface DrillPreset {
+  id: string;
+  name: string;
+  status: EntityStatus;
+  range: RangeKey;
+  type: EntityType | 'all';
+  search: string;
+  createdAt: number;
+}
+
+const PRESETS_KEY = 'atlas:drill-presets';
+
+function loadPresets(): DrillPreset[] {
+  try {
+    const raw = localStorage.getItem(PRESETS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {/* ignore */}
+  return [];
+}
+
+function savePresets(presets: DrillPreset[]) {
+  try { localStorage.setItem(PRESETS_KEY, JSON.stringify(presets)); } catch {/* ignore */}
+}
+
 export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -93,6 +117,47 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
   const [drillSearch, setDrillSearch] = useState('');
   const [drillType, setDrillType] = useState<EntityType | 'all'>('all');
   const [showDrillExport, setShowDrillExport] = useState(false);
+  const [presets, setPresets] = useState<DrillPreset[]>(() => loadPresets());
+  const [showPresetsMenu, setShowPresetsMenu] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [shareCopied, setShareCopied] = useState(false);
+  const [perEntityMenu, setPerEntityMenu] = useState<string | null>(null);
+
+  // Load drill state from URL on open
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ds = params.get('drill') as EntityStatus | null;
+      if (ds && ['stable', 'stressed', 'critical', 'recovering', 'uncertain', 'degraded'].includes(ds)) {
+        setDrillStatus(ds);
+        const r = params.get('range') as RangeKey | null;
+        if (r && (r === '24h' || r === '7d' || r === '30d')) setDrillRange(r);
+        const t = params.get('type');
+        if (t) setDrillType(t as EntityType | 'all');
+        const q = params.get('q');
+        if (q) setDrillSearch(q);
+      }
+    } catch {/* ignore */}
+  }, [isOpen]);
+
+  // Sync drill state to URL
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (drillStatus) {
+        params.set('drill', drillStatus);
+        params.set('range', drillRange);
+        params.set('type', drillType);
+        if (drillSearch) params.set('q', drillSearch); else params.delete('q');
+      } else {
+        params.delete('drill'); params.delete('range'); params.delete('type'); params.delete('q');
+      }
+      const qs = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`);
+    } catch {/* ignore */}
+  }, [isOpen, drillStatus, drillRange, drillType, drillSearch]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
@@ -475,6 +540,118 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                     setShowDrillExport(false);
                   };
 
+                  // Per-entity history exports (used from each entity card)
+                  const exportEntityCSV = (entity: WorldEntity) => {
+                    const data = histById[entity.id] || generateHistoricalData(entity, range.points);
+                    const meta = [
+                      `# ${entity.name} · ${range.label} history`,
+                      `# Type: ${entityTypeConfig[entity.type].label} · Status: ${entity.status}`,
+                      `# Generated ${new Date().toISOString()}`,
+                      '',
+                    ];
+                    const rows = data.map((d, i) => [range.tickLabel(i, range.points), Math.round(d.value)]);
+                    const csv = [...meta, 'time,value', ...rows.map(r => r.join(','))].join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${entity.id}-${drillRange}.csv`;
+                    a.click();
+                    setPerEntityMenu(null);
+                  };
+
+                  const exportEntityPDF = (entity: WorldEntity) => {
+                    const data = histById[entity.id] || generateHistoricalData(entity, range.points);
+                    const min = Math.round(Math.min(...data.map(d => d.value)));
+                    const max = Math.round(Math.max(...data.map(d => d.value)));
+                    const avg = Math.round(data.reduce((s, d) => s + d.value, 0) / Math.max(1, data.length));
+
+                    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                    const pageWidth = doc.internal.pageSize.getWidth();
+                    doc.setFillColor(15, 18, 22);
+                    doc.rect(0, 0, pageWidth, 210, 'F');
+                    doc.setTextColor(200, 220, 230);
+                    doc.setFontSize(20);
+                    doc.text(`${entity.name} — ${range.label} Report`, 20, 25);
+                    doc.setFontSize(10);
+                    doc.setTextColor(120, 140, 150);
+                    doc.text(`Generated ${new Date().toLocaleString()}`, 20, 34);
+                    doc.text(`Type: ${entityTypeConfig[entity.type].label} · Status: ${entity.status} · Confidence: ${entity.confidence}`, 20, 41);
+                    doc.text(`History summary — min ${min} / avg ${avg} / max ${max}`, 20, 48);
+
+                    // Sparkline drawn into PDF
+                    const chartX = 20, chartY = 60, chartW = pageWidth - 40, chartH = 60;
+                    doc.setDrawColor(60, 70, 80);
+                    doc.rect(chartX, chartY, chartW, chartH);
+                    doc.setDrawColor(100, 210, 190);
+                    doc.setLineWidth(0.4);
+                    const stepX = chartW / Math.max(1, data.length - 1);
+                    for (let i = 1; i < data.length; i++) {
+                      const x1 = chartX + (i - 1) * stepX;
+                      const y1 = chartY + chartH - (data[i - 1].value / 100) * chartH;
+                      const x2 = chartX + i * stepX;
+                      const y2 = chartY + chartH - (data[i].value / 100) * chartH;
+                      doc.line(x1, y1, x2, y2);
+                    }
+
+                    autoTable(doc, {
+                      startY: chartY + chartH + 10,
+                      head: [['Time', 'Value']],
+                      body: data.map((d, i) => [range.tickLabel(i, range.points), String(Math.round(d.value))]),
+                      styles: { fillColor: [20, 24, 30], textColor: [180, 195, 210], fontSize: 8, cellPadding: 2 },
+                      headStyles: { fillColor: [30, 40, 50], textColor: [100, 210, 190], fontSize: 9, fontStyle: 'bold' },
+                      alternateRowStyles: { fillColor: [25, 30, 38] },
+                    });
+
+                    doc.save(`${entity.id}-${drillRange}.pdf`);
+                    setPerEntityMenu(null);
+                  };
+
+                  // Save current drill as preset
+                  const saveCurrentPreset = () => {
+                    const name = presetName.trim() || `${statusLabels[drillStatus]}${drillType !== 'all' ? ' · ' + entityTypeConfig[drillType].label : ''}${drillSearch ? ' · "' + drillSearch + '"' : ''} · ${drillRange}`;
+                    const preset: DrillPreset = {
+                      id: `preset-${Date.now()}`,
+                      name,
+                      status: drillStatus,
+                      range: drillRange,
+                      type: drillType,
+                      search: drillSearch,
+                      createdAt: Date.now(),
+                    };
+                    const next = [preset, ...presets].slice(0, 20);
+                    setPresets(next);
+                    savePresets(next);
+                    setPresetName('');
+                  };
+
+                  const applyPreset = (p: DrillPreset) => {
+                    setDrillStatus(p.status);
+                    setDrillRange(p.range);
+                    setDrillType(p.type);
+                    setDrillSearch(p.search);
+                    setShowPresetsMenu(false);
+                  };
+
+                  const deletePreset = (id: string) => {
+                    const next = presets.filter(p => p.id !== id);
+                    setPresets(next);
+                    savePresets(next);
+                  };
+
+                  const copyShareLink = async () => {
+                    try {
+                      const params = new URLSearchParams();
+                      params.set('drill', drillStatus);
+                      params.set('range', drillRange);
+                      params.set('type', drillType);
+                      if (drillSearch) params.set('q', drillSearch);
+                      const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+                      await navigator.clipboard.writeText(url);
+                      setShareCopied(true);
+                      setTimeout(() => setShareCopied(false), 1800);
+                    } catch {/* ignore */}
+                  };
+
                   return (
                     <motion.div
                       key={drillStatus}
@@ -550,6 +727,88 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                               )}
                             </AnimatePresence>
                           </div>
+
+                          {/* Presets dropdown */}
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowPresetsMenu(!showPresetsMenu)}
+                              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                              title="Saved drill-down presets"
+                            >
+                              <Bookmark className="h-3 w-3" />
+                              Presets
+                              {presets.length > 0 && (
+                                <span className="ml-0.5 rounded-full bg-primary/20 px-1 font-mono text-[8px] text-primary">{presets.length}</span>
+                              )}
+                            </button>
+                            <AnimatePresence>
+                              {showPresetsMenu && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -4 }}
+                                  className="absolute right-0 top-full mt-1 z-20 w-72 rounded-lg border border-border/50 bg-card shadow-xl"
+                                >
+                                  <div className="border-b border-border/40 p-2.5">
+                                    <span className="block font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Save current view</span>
+                                    <div className="mt-1.5 flex items-center gap-1.5">
+                                      <input
+                                        value={presetName}
+                                        onChange={e => setPresetName(e.target.value)}
+                                        placeholder={`e.g. Critical river type=eco`}
+                                        className="flex-1 rounded-md border border-border/50 bg-muted/20 px-2 py-1 font-mono text-[10px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                                      />
+                                      <button
+                                        onClick={saveCurrentPreset}
+                                        className="rounded-md bg-primary/15 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-primary transition-colors hover:bg-primary/25"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="max-h-64 overflow-auto py-1">
+                                    {presets.length === 0 && (
+                                      <div className="px-3 py-4 text-center font-mono text-[9px] text-muted-foreground">
+                                        No saved presets yet
+                                      </div>
+                                    )}
+                                    {presets.map(p => (
+                                      <div key={p.id} className="group flex items-center gap-1.5 px-2 py-1.5 hover:bg-muted/30">
+                                        <button
+                                          onClick={() => applyPreset(p)}
+                                          className="min-w-0 flex-1 text-left"
+                                        >
+                                          <div className="truncate font-mono text-[10px] font-medium text-foreground">{p.name}</div>
+                                          <div className="truncate font-mono text-[8px] text-muted-foreground">
+                                            {statusLabels[p.status]} · {RANGE_CONFIG[p.range].label} · {p.type === 'all' ? 'all types' : entityTypeConfig[p.type].label}
+                                          </div>
+                                        </button>
+                                        <button
+                                          onClick={() => deletePreset(p.id)}
+                                          className="rounded p-1 text-muted-foreground opacity-0 transition-all hover:text-destructive group-hover:opacity-100"
+                                          title="Delete preset"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+
+                          {/* Share link */}
+                          <button
+                            onClick={copyShareLink}
+                            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                              shareCopied ? 'bg-status-stable/15 text-status-stable' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                            }`}
+                            title="Copy shareable link to this drill-down"
+                          >
+                            {shareCopied ? <Check className="h-3 w-3" /> : <Share2 className="h-3 w-3" />}
+                            {shareCopied ? 'Copied' : 'Share'}
+                          </button>
                         </div>
                       </div>
 
@@ -625,58 +884,98 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                             const declining = entity.metrics.filter(m => m.trend === 'down').length;
                             const rising = entity.metrics.filter(m => m.trend === 'up').length;
                             return (
-                              <button
+                              <div
                                 key={entity.id}
-                                onClick={() => { onEntitySelect(entity.id); onClose(); }}
-                                className="rounded-lg border border-border/40 bg-muted/10 p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                                className="relative rounded-lg border border-border/40 bg-muted/10 p-3 transition-colors hover:border-primary/40 hover:bg-primary/5"
                               >
-                                <div className="flex items-start gap-3">
-                                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${statusColors[entity.status]}/15`}
-                                    style={{ backgroundColor: `${statusHslColors[entity.status]}22` }}>
-                                    <Icon className={`h-4 w-4 ${statusTextColors[entity.status]}`} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-mono text-[11px] font-medium text-foreground truncate">{entity.name}</div>
-                                    <div className="font-mono text-[9px] text-muted-foreground">
-                                      {entityTypeConfig[entity.type].label} · {entity.location || 'Global'}
+                                {/* Per-entity export menu */}
+                                <div className="absolute right-2 top-2 z-10">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setPerEntityMenu(perEntityMenu === entity.id ? null : entity.id); }}
+                                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                                    title="Export this entity's history"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </button>
+                                  <AnimatePresence>
+                                    {perEntityMenu === entity.id && (
+                                      <motion.div
+                                        initial={{ opacity: 0, y: -4 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -4 }}
+                                        className="absolute right-0 top-full mt-1 z-30 rounded-lg border border-border/50 bg-card shadow-xl"
+                                      >
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); exportEntityPDF(entity); }}
+                                          className="flex w-full items-center gap-2 rounded-t-lg px-3 py-2 font-mono text-[10px] text-foreground hover:bg-muted/40 whitespace-nowrap"
+                                        >
+                                          <FileText className="h-3 w-3 text-status-critical" />
+                                          {range.label} PDF
+                                        </button>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); exportEntityCSV(entity); }}
+                                          className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2 font-mono text-[10px] text-foreground hover:bg-muted/40 whitespace-nowrap"
+                                        >
+                                          <FileSpreadsheet className="h-3 w-3 text-status-stable" />
+                                          {range.label} CSV
+                                        </button>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+
+                                <button
+                                  onClick={() => { onEntitySelect(entity.id); onClose(); }}
+                                  className="block w-full text-left"
+                                >
+                                  <div className="flex items-start gap-3 pr-6">
+                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${statusColors[entity.status]}/15`}
+                                      style={{ backgroundColor: `${statusHslColors[entity.status]}22` }}>
+                                      <Icon className={`h-4 w-4 ${statusTextColors[entity.status]}`} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-mono text-[11px] font-medium text-foreground truncate">{entity.name}</div>
+                                      <div className="font-mono text-[9px] text-muted-foreground">
+                                        {entityTypeConfig[entity.type].label} · {entity.location || 'Global'}
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
 
-                                <div className="mt-2 h-16">
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={histData}>
-                                      <defs>
-                                        <linearGradient id={`grad-${entity.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={palette[idx % palette.length]} stopOpacity={0.4} />
-                                          <stop offset="100%" stopColor={palette[idx % palette.length]} stopOpacity={0} />
-                                        </linearGradient>
-                                      </defs>
-                                      <Area
-                                        type="monotone"
-                                        dataKey="value"
-                                        stroke={palette[idx % palette.length]}
-                                        strokeWidth={1.5}
-                                        fill={`url(#grad-${entity.id})`}
-                                      />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                </div>
+                                  <div className="mt-2 h-16">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <AreaChart data={histData}>
+                                        <defs>
+                                          <linearGradient id={`grad-${entity.id}`} x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor={palette[idx % palette.length]} stopOpacity={0.4} />
+                                            <stop offset="100%" stopColor={palette[idx % palette.length]} stopOpacity={0} />
+                                          </linearGradient>
+                                        </defs>
+                                        <Area
+                                          type="monotone"
+                                          dataKey="value"
+                                          stroke={palette[idx % palette.length]}
+                                          strokeWidth={1.5}
+                                          fill={`url(#grad-${entity.id})`}
+                                        />
+                                      </AreaChart>
+                                    </ResponsiveContainer>
+                                  </div>
 
-                                <div className="mt-2 flex items-center justify-between font-mono text-[9px]">
-                                  <span className="text-muted-foreground">
-                                    Risk: <span className="text-foreground/80">{entity.risks[0] || '—'}</span>
-                                  </span>
-                                  <span className="flex items-center gap-2">
-                                    <span className="flex items-center gap-0.5 text-status-critical">
-                                      <TrendingDown className="h-2.5 w-2.5" />{declining}
+                                  <div className="mt-2 flex items-center justify-between font-mono text-[9px]">
+                                    <span className="text-muted-foreground">
+                                      Risk: <span className="text-foreground/80">{entity.risks[0] || '—'}</span>
                                     </span>
-                                    <span className="flex items-center gap-0.5 text-status-stressed">
-                                      <TrendingUp className="h-2.5 w-2.5" />{rising}
+                                    <span className="flex items-center gap-2">
+                                      <span className="flex items-center gap-0.5 text-status-critical">
+                                        <TrendingDown className="h-2.5 w-2.5" />{declining}
+                                      </span>
+                                      <span className="flex items-center gap-0.5 text-status-stressed">
+                                        <TrendingUp className="h-2.5 w-2.5" />{rising}
+                                      </span>
                                     </span>
-                                  </span>
-                                </div>
-                              </button>
+                                  </div>
+                                </button>
+                              </div>
                             );
                           })}
                           {drillEntities.length === 0 && (

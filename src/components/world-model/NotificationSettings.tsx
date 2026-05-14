@@ -1,6 +1,26 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bell, Volume2, AlertTriangle, AlertCircle, Moon } from 'lucide-react';
+import { X, Bell, Volume2, AlertTriangle, AlertCircle, Moon, Play, BellOff } from 'lucide-react';
+
+type Severity = 'critical' | 'stressed';
+
+function playAlertSound(severity: Severity) {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = severity === 'critical' ? 880 : 540;
+    osc.type = 'sine';
+    const dur = severity === 'critical' ? 0.4 : 0.25;
+    gain.gain.setValueAtTime(severity === 'critical' ? 0.15 : 0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + dur);
+    setTimeout(() => ctx.close(), (dur + 0.1) * 1000);
+  } catch {/* ignore */}
+}
 
 export interface NotificationSettings {
   soundEnabled: boolean;
@@ -138,19 +158,48 @@ export function NotificationSettingsPanel({ isOpen, onClose, settings, onChange 
                   onChange={v => update({ quietHoursEnabled: v })}
                 />
                 {draft.quietHoursEnabled && (
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <HourSelect
-                      label="From"
-                      value={draft.quietStart}
-                      onChange={v => update({ quietStart: v })}
-                    />
-                    <HourSelect
-                      label="To"
-                      value={draft.quietEnd}
-                      onChange={v => update({ quietEnd: v })}
-                    />
-                  </div>
+                  <>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <HourSelect
+                        label="From"
+                        value={draft.quietStart}
+                        onChange={v => update({ quietStart: v })}
+                      />
+                      <HourSelect
+                        label="To"
+                        value={draft.quietEnd}
+                        onChange={v => update({ quietEnd: v })}
+                      />
+                    </div>
+                    <QuietHoursPreview settings={draft} />
+                  </>
                 )}
+              </div>
+
+              <div className="border-t border-border/30" />
+
+              {/* Test alerts */}
+              <div>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Test alerts</span>
+                <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                  Preview the tone and severity feedback before live alerts fire.
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <TestButton
+                    severity="stressed"
+                    disabled={!draft.alertOnStressed}
+                    quiet={isInQuietHours(draft)}
+                    soundOff={!draft.soundEnabled}
+                    onPlay={() => playAlertSound('stressed')}
+                  />
+                  <TestButton
+                    severity="critical"
+                    disabled={!draft.alertOnCritical}
+                    quiet={isInQuietHours(draft)}
+                    soundOff={!draft.soundEnabled}
+                    onPlay={() => playAlertSound('critical')}
+                  />
+                </div>
               </div>
             </div>
 
@@ -209,5 +258,93 @@ function HourSelect({ label, value, onChange }: { label: string; value: number; 
         ))}
       </select>
     </label>
+  );
+}
+
+function fmtHour(h: number) { return `${String(h).padStart(2, '0')}:00`; }
+
+function QuietHoursPreview({ settings }: { settings: NotificationSettings }) {
+  const now = new Date();
+  const active = isInQuietHours(settings, now);
+  // Compute next transition
+  const h = now.getHours();
+  let nextLabel = '';
+  if (active) {
+    nextLabel = `Sound resumes at ${fmtHour(settings.quietEnd)}`;
+  } else {
+    nextLabel = `Quiet starts at ${fmtHour(settings.quietStart)}`;
+  }
+  // 24-hour timeline blocks
+  const blocks = Array.from({ length: 24 }, (_, i) => {
+    let inQuiet: boolean;
+    if (settings.quietStart === settings.quietEnd) inQuiet = false;
+    else if (settings.quietStart < settings.quietEnd) inQuiet = i >= settings.quietStart && i < settings.quietEnd;
+    else inQuiet = i >= settings.quietStart || i < settings.quietEnd;
+    return { hour: i, quiet: inQuiet, current: i === h };
+  });
+  return (
+    <div className="mt-3 rounded-md border border-border/40 bg-muted/10 p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          {active ? <BellOff className="h-3 w-3 text-status-stable" /> : <Bell className="h-3 w-3 text-foreground/70" />}
+          Now: {active ? 'Quiet' : 'Active'}
+        </span>
+        <span className="font-mono text-[9px] text-muted-foreground">{nextLabel}</span>
+      </div>
+      <div className="mt-2 flex h-4 overflow-hidden rounded-sm border border-border/40">
+        {blocks.map(b => (
+          <div
+            key={b.hour}
+            title={`${fmtHour(b.hour)} ${b.quiet ? '· quiet' : '· alerts on'}`}
+            className={`relative flex-1 ${b.quiet ? 'bg-muted/60' : 'bg-primary/30'}`}
+          >
+            {b.current && <div className="absolute inset-y-0 left-0 w-px bg-foreground" />}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between font-mono text-[8px] text-muted-foreground/60">
+        <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+      </div>
+    </div>
+  );
+}
+
+function TestButton({ severity, disabled, quiet, soundOff, onPlay }: {
+  severity: Severity; disabled: boolean; quiet: boolean; soundOff: boolean; onPlay: () => void;
+}) {
+  const [pulsing, setPulsing] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const isCritical = severity === 'critical';
+  const Icon = isCritical ? AlertTriangle : AlertCircle;
+  const handleClick = () => {
+    if (!soundOff && !quiet) onPlay();
+    setPulsing(true);
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setPulsing(false), 600);
+  };
+  useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
+
+  const muted = disabled || soundOff || quiet;
+  return (
+    <button
+      onClick={handleClick}
+      disabled={disabled}
+      className={`group relative flex flex-col items-start gap-0.5 rounded-md border p-2.5 text-left transition-all ${
+        disabled
+          ? 'cursor-not-allowed border-border/30 bg-muted/10 opacity-50'
+          : isCritical
+            ? 'border-status-critical/30 bg-status-critical/5 hover:bg-status-critical/10'
+            : 'border-status-stressed/30 bg-status-stressed/5 hover:bg-status-stressed/10'
+      } ${pulsing ? 'ring-2 ring-offset-1 ring-offset-card ' + (isCritical ? 'ring-status-critical/60' : 'ring-status-stressed/60') : ''}`}
+    >
+      <span className="flex items-center gap-1.5">
+        <Icon className={`h-3 w-3 ${isCritical ? 'text-status-critical' : 'text-status-stressed'}`} />
+        <span className="font-mono text-[10px] font-medium text-foreground">Test {severity}</span>
+        <Play className="h-2.5 w-2.5 text-muted-foreground" />
+      </span>
+      <span className="font-mono text-[8px] text-muted-foreground">
+        {disabled ? 'Severity disabled' : muted ? (quiet ? 'Quiet hours · silent' : 'Sound off · silent') : `${isCritical ? '880' : '540'}Hz tone`}
+      </span>
+    </button>
   );
 }
