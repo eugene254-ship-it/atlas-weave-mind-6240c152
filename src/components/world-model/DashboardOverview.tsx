@@ -884,58 +884,98 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                             const declining = entity.metrics.filter(m => m.trend === 'down').length;
                             const rising = entity.metrics.filter(m => m.trend === 'up').length;
                             return (
-                              <button
+                              <div
                                 key={entity.id}
-                                onClick={() => { onEntitySelect(entity.id); onClose(); }}
-                                className="rounded-lg border border-border/40 bg-muted/10 p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                                className="relative rounded-lg border border-border/40 bg-muted/10 p-3 transition-colors hover:border-primary/40 hover:bg-primary/5"
                               >
-                                <div className="flex items-start gap-3">
-                                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${statusColors[entity.status]}/15`}
-                                    style={{ backgroundColor: `${statusHslColors[entity.status]}22` }}>
-                                    <Icon className={`h-4 w-4 ${statusTextColors[entity.status]}`} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-mono text-[11px] font-medium text-foreground truncate">{entity.name}</div>
-                                    <div className="font-mono text-[9px] text-muted-foreground">
-                                      {entityTypeConfig[entity.type].label} · {entity.location || 'Global'}
+                                {/* Per-entity export menu */}
+                                <div className="absolute right-2 top-2 z-10">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setPerEntityMenu(perEntityMenu === entity.id ? null : entity.id); }}
+                                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                                    title="Export this entity's history"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </button>
+                                  <AnimatePresence>
+                                    {perEntityMenu === entity.id && (
+                                      <motion.div
+                                        initial={{ opacity: 0, y: -4 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -4 }}
+                                        className="absolute right-0 top-full mt-1 z-30 rounded-lg border border-border/50 bg-card shadow-xl"
+                                      >
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); exportEntityPDF(entity); }}
+                                          className="flex w-full items-center gap-2 rounded-t-lg px-3 py-2 font-mono text-[10px] text-foreground hover:bg-muted/40 whitespace-nowrap"
+                                        >
+                                          <FileText className="h-3 w-3 text-status-critical" />
+                                          {range.label} PDF
+                                        </button>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); exportEntityCSV(entity); }}
+                                          className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2 font-mono text-[10px] text-foreground hover:bg-muted/40 whitespace-nowrap"
+                                        >
+                                          <FileSpreadsheet className="h-3 w-3 text-status-stable" />
+                                          {range.label} CSV
+                                        </button>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+
+                                <button
+                                  onClick={() => { onEntitySelect(entity.id); onClose(); }}
+                                  className="block w-full text-left"
+                                >
+                                  <div className="flex items-start gap-3 pr-6">
+                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${statusColors[entity.status]}/15`}
+                                      style={{ backgroundColor: `${statusHslColors[entity.status]}22` }}>
+                                      <Icon className={`h-4 w-4 ${statusTextColors[entity.status]}`} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-mono text-[11px] font-medium text-foreground truncate">{entity.name}</div>
+                                      <div className="font-mono text-[9px] text-muted-foreground">
+                                        {entityTypeConfig[entity.type].label} · {entity.location || 'Global'}
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
 
-                                <div className="mt-2 h-16">
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={histData}>
-                                      <defs>
-                                        <linearGradient id={`grad-${entity.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={palette[idx % palette.length]} stopOpacity={0.4} />
-                                          <stop offset="100%" stopColor={palette[idx % palette.length]} stopOpacity={0} />
-                                        </linearGradient>
-                                      </defs>
-                                      <Area
-                                        type="monotone"
-                                        dataKey="value"
-                                        stroke={palette[idx % palette.length]}
-                                        strokeWidth={1.5}
-                                        fill={`url(#grad-${entity.id})`}
-                                      />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                </div>
+                                  <div className="mt-2 h-16">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <AreaChart data={histData}>
+                                        <defs>
+                                          <linearGradient id={`grad-${entity.id}`} x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor={palette[idx % palette.length]} stopOpacity={0.4} />
+                                            <stop offset="100%" stopColor={palette[idx % palette.length]} stopOpacity={0} />
+                                          </linearGradient>
+                                        </defs>
+                                        <Area
+                                          type="monotone"
+                                          dataKey="value"
+                                          stroke={palette[idx % palette.length]}
+                                          strokeWidth={1.5}
+                                          fill={`url(#grad-${entity.id})`}
+                                        />
+                                      </AreaChart>
+                                    </ResponsiveContainer>
+                                  </div>
 
-                                <div className="mt-2 flex items-center justify-between font-mono text-[9px]">
-                                  <span className="text-muted-foreground">
-                                    Risk: <span className="text-foreground/80">{entity.risks[0] || '—'}</span>
-                                  </span>
-                                  <span className="flex items-center gap-2">
-                                    <span className="flex items-center gap-0.5 text-status-critical">
-                                      <TrendingDown className="h-2.5 w-2.5" />{declining}
+                                  <div className="mt-2 flex items-center justify-between font-mono text-[9px]">
+                                    <span className="text-muted-foreground">
+                                      Risk: <span className="text-foreground/80">{entity.risks[0] || '—'}</span>
                                     </span>
-                                    <span className="flex items-center gap-0.5 text-status-stressed">
-                                      <TrendingUp className="h-2.5 w-2.5" />{rising}
+                                    <span className="flex items-center gap-2">
+                                      <span className="flex items-center gap-0.5 text-status-critical">
+                                        <TrendingDown className="h-2.5 w-2.5" />{declining}
+                                      </span>
+                                      <span className="flex items-center gap-0.5 text-status-stressed">
+                                        <TrendingUp className="h-2.5 w-2.5" />{rising}
+                                      </span>
                                     </span>
-                                  </span>
-                                </div>
-                              </button>
+                                  </div>
+                                </button>
+                              </div>
                             );
                           })}
                           {drillEntities.length === 0 && (
