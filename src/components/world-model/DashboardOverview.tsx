@@ -62,16 +62,28 @@ const entityIcons: Record<string, typeof Droplets> = {
 };
 
 // Generate mock historical data for sparklines
-function generateHistoricalData(entity: WorldEntity) {
+function generateHistoricalData(entity: WorldEntity, points = 12) {
   const statusScore: Record<EntityStatus, number> = {
     stable: 90, recovering: 70, uncertain: 55, degraded: 40, stressed: 25, critical: 10,
   };
   const baseScore = statusScore[entity.status];
-  return Array.from({ length: 12 }, (_, i) => ({
+  const mid = points / 2;
+  return Array.from({ length: points }, (_, i) => ({
     time: i,
-    value: Math.max(5, Math.min(95, baseScore + (Math.random() - 0.5) * 30 + (i - 6) * (Math.random() > 0.5 ? 2 : -2))),
+    value: Math.max(5, Math.min(95, baseScore + (Math.random() - 0.5) * 30 + (i - mid) * (Math.random() > 0.5 ? 0.5 : -0.5))),
   }));
 }
+
+type RangeKey = '24h' | '7d' | '30d';
+const RANGE_CONFIG: Record<RangeKey, { points: number; label: string; tickLabel: (i: number, total: number) => string }> = {
+  '24h': { points: 24, label: '24-Hour', tickLabel: (i, t) => `T-${t - 1 - i}h` },
+  '7d': { points: 28, label: '7-Day', tickLabel: (i, t) => `D-${Math.round((t - 1 - i) / 4)}` },
+  '30d': { points: 30, label: '30-Day', tickLabel: (i, t) => `D-${t - 1 - i}` },
+};
+
+const RISK_WEIGHT: Record<EntityStatus, number> = {
+  critical: 100, stressed: 75, degraded: 60, uncertain: 40, recovering: 25, stable: 10,
+};
 
 export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
