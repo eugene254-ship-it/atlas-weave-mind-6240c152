@@ -27,6 +27,7 @@ interface Props {
   ticks: SimulationTick[];
   entityNames: Record<string, string>;
   onEntitySelect: (id: string) => void;
+  settings?: NotificationSettings;
 }
 
 const STABLE_LIKE = new Set(['stable', 'recovering', 'uncertain']);
