@@ -69,6 +69,8 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect, settin
       const wasOk = STABLE_LIKE.has(t.oldValue);
       const isCritical = t.newValue === 'critical' && t.oldValue !== 'critical';
       const isStressed = t.newValue === 'stressed' && wasOk;
+      if (isCritical && !allowCritical) return false;
+      if (isStressed && !allowStressed) return false;
       return isCritical || isStressed;
     });
 
@@ -95,10 +97,11 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect, settin
     if (newAlerts.length > 0) {
       setAlerts(prev => [...newAlerts, ...prev].slice(0, 10));
       setFlashSeverity(highest);
-      if (soundEnabled && highest) playAlertSound(highest);
+      const quiet = settings ? isInQuietHours(settings) : false;
+      if (soundEnabled && !quiet && highest) playAlertSound(highest);
       setTimeout(() => setFlashSeverity(null), 600);
     }
-  }, [ticks, entityNames, soundEnabled]);
+  }, [ticks, entityNames, soundEnabled, allowStressed, allowCritical, settings]);
 
   const dismissAlert = useCallback((id: string) => {
     setAlerts(prev => prev.filter(a => a.id !== id));
