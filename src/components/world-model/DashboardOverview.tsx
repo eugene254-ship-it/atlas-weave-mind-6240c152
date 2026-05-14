@@ -89,6 +89,10 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [drillStatus, setDrillStatus] = useState<EntityStatus | null>(null);
+  const [drillRange, setDrillRange] = useState<RangeKey>('24h');
+  const [drillSearch, setDrillSearch] = useState('');
+  const [drillType, setDrillType] = useState<EntityType | 'all'>('all');
+  const [showDrillExport, setShowDrillExport] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
