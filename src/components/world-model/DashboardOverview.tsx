@@ -727,6 +727,88 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                               )}
                             </AnimatePresence>
                           </div>
+
+                          {/* Presets dropdown */}
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowPresetsMenu(!showPresetsMenu)}
+                              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                              title="Saved drill-down presets"
+                            >
+                              <Bookmark className="h-3 w-3" />
+                              Presets
+                              {presets.length > 0 && (
+                                <span className="ml-0.5 rounded-full bg-primary/20 px-1 font-mono text-[8px] text-primary">{presets.length}</span>
+                              )}
+                            </button>
+                            <AnimatePresence>
+                              {showPresetsMenu && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -4 }}
+                                  className="absolute right-0 top-full mt-1 z-20 w-72 rounded-lg border border-border/50 bg-card shadow-xl"
+                                >
+                                  <div className="border-b border-border/40 p-2.5">
+                                    <span className="block font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Save current view</span>
+                                    <div className="mt-1.5 flex items-center gap-1.5">
+                                      <input
+                                        value={presetName}
+                                        onChange={e => setPresetName(e.target.value)}
+                                        placeholder={`e.g. Critical river type=eco`}
+                                        className="flex-1 rounded-md border border-border/50 bg-muted/20 px-2 py-1 font-mono text-[10px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                                      />
+                                      <button
+                                        onClick={saveCurrentPreset}
+                                        className="rounded-md bg-primary/15 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-primary transition-colors hover:bg-primary/25"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="max-h-64 overflow-auto py-1">
+                                    {presets.length === 0 && (
+                                      <div className="px-3 py-4 text-center font-mono text-[9px] text-muted-foreground">
+                                        No saved presets yet
+                                      </div>
+                                    )}
+                                    {presets.map(p => (
+                                      <div key={p.id} className="group flex items-center gap-1.5 px-2 py-1.5 hover:bg-muted/30">
+                                        <button
+                                          onClick={() => applyPreset(p)}
+                                          className="min-w-0 flex-1 text-left"
+                                        >
+                                          <div className="truncate font-mono text-[10px] font-medium text-foreground">{p.name}</div>
+                                          <div className="truncate font-mono text-[8px] text-muted-foreground">
+                                            {statusLabels[p.status]} · {RANGE_CONFIG[p.range].label} · {p.type === 'all' ? 'all types' : entityTypeConfig[p.type].label}
+                                          </div>
+                                        </button>
+                                        <button
+                                          onClick={() => deletePreset(p.id)}
+                                          className="rounded p-1 text-muted-foreground opacity-0 transition-all hover:text-destructive group-hover:opacity-100"
+                                          title="Delete preset"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+
+                          {/* Share link */}
+                          <button
+                            onClick={copyShareLink}
+                            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                              shareCopied ? 'bg-status-stable/15 text-status-stable' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                            }`}
+                            title="Copy shareable link to this drill-down"
+                          >
+                            {shareCopied ? <Check className="h-3 w-3" /> : <Share2 className="h-3 w-3" />}
+                            {shareCopied ? 'Copied' : 'Share'}
+                          </button>
                         </div>
                       </div>
 
