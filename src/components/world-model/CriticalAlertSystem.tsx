@@ -149,7 +149,7 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect, settin
             </span>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
+                onClick={() => setSoundEnabledLocal(!soundEnabledLocal)}
                 className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
                 title={soundEnabled ? 'Mute alerts' : 'Unmute alerts'}
               >
