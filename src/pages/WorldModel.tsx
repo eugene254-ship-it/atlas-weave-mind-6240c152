@@ -52,6 +52,8 @@ const WorldModel = () => {
   const [showBranching, setShowBranching] = useState(false);
   const [showRelEditor, setShowRelEditor] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showNotifSettings, setShowNotifSettings] = useState(false);
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings>(() => loadNotificationSettings());
   const [customRelationships, setCustomRelationships] = useState<(WorldRelationship & { isCustom?: boolean })[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
