@@ -540,6 +540,118 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                     setShowDrillExport(false);
                   };
 
+                  // Per-entity history exports (used from each entity card)
+                  const exportEntityCSV = (entity: WorldEntity) => {
+                    const data = histById[entity.id] || generateHistoricalData(entity, range.points);
+                    const meta = [
+                      `# ${entity.name} · ${range.label} history`,
+                      `# Type: ${entityTypeConfig[entity.type].label} · Status: ${entity.status}`,
+                      `# Generated ${new Date().toISOString()}`,
+                      '',
+                    ];
+                    const rows = data.map((d, i) => [range.tickLabel(i, range.points), Math.round(d.value)]);
+                    const csv = [...meta, 'time,value', ...rows.map(r => r.join(','))].join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${entity.id}-${drillRange}.csv`;
+                    a.click();
+                    setPerEntityMenu(null);
+                  };
+
+                  const exportEntityPDF = (entity: WorldEntity) => {
+                    const data = histById[entity.id] || generateHistoricalData(entity, range.points);
+                    const min = Math.round(Math.min(...data.map(d => d.value)));
+                    const max = Math.round(Math.max(...data.map(d => d.value)));
+                    const avg = Math.round(data.reduce((s, d) => s + d.value, 0) / Math.max(1, data.length));
+
+                    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                    const pageWidth = doc.internal.pageSize.getWidth();
+                    doc.setFillColor(15, 18, 22);
+                    doc.rect(0, 0, pageWidth, 210, 'F');
+                    doc.setTextColor(200, 220, 230);
+                    doc.setFontSize(20);
+                    doc.text(`${entity.name} — ${range.label} Report`, 20, 25);
+                    doc.setFontSize(10);
+                    doc.setTextColor(120, 140, 150);
+                    doc.text(`Generated ${new Date().toLocaleString()}`, 20, 34);
+                    doc.text(`Type: ${entityTypeConfig[entity.type].label} · Status: ${entity.status} · Confidence: ${entity.confidence}`, 20, 41);
+                    doc.text(`History summary — min ${min} / avg ${avg} / max ${max}`, 20, 48);
+
+                    // Sparkline drawn into PDF
+                    const chartX = 20, chartY = 60, chartW = pageWidth - 40, chartH = 60;
+                    doc.setDrawColor(60, 70, 80);
+                    doc.rect(chartX, chartY, chartW, chartH);
+                    doc.setDrawColor(100, 210, 190);
+                    doc.setLineWidth(0.4);
+                    const stepX = chartW / Math.max(1, data.length - 1);
+                    for (let i = 1; i < data.length; i++) {
+                      const x1 = chartX + (i - 1) * stepX;
+                      const y1 = chartY + chartH - (data[i - 1].value / 100) * chartH;
+                      const x2 = chartX + i * stepX;
+                      const y2 = chartY + chartH - (data[i].value / 100) * chartH;
+                      doc.line(x1, y1, x2, y2);
+                    }
+
+                    autoTable(doc, {
+                      startY: chartY + chartH + 10,
+                      head: [['Time', 'Value']],
+                      body: data.map((d, i) => [range.tickLabel(i, range.points), String(Math.round(d.value))]),
+                      styles: { fillColor: [20, 24, 30], textColor: [180, 195, 210], fontSize: 8, cellPadding: 2 },
+                      headStyles: { fillColor: [30, 40, 50], textColor: [100, 210, 190], fontSize: 9, fontStyle: 'bold' },
+                      alternateRowStyles: { fillColor: [25, 30, 38] },
+                    });
+
+                    doc.save(`${entity.id}-${drillRange}.pdf`);
+                    setPerEntityMenu(null);
+                  };
+
+                  // Save current drill as preset
+                  const saveCurrentPreset = () => {
+                    const name = presetName.trim() || `${statusLabels[drillStatus]}${drillType !== 'all' ? ' · ' + entityTypeConfig[drillType].label : ''}${drillSearch ? ' · "' + drillSearch + '"' : ''} · ${drillRange}`;
+                    const preset: DrillPreset = {
+                      id: `preset-${Date.now()}`,
+                      name,
+                      status: drillStatus,
+                      range: drillRange,
+                      type: drillType,
+                      search: drillSearch,
+                      createdAt: Date.now(),
+                    };
+                    const next = [preset, ...presets].slice(0, 20);
+                    setPresets(next);
+                    savePresets(next);
+                    setPresetName('');
+                  };
+
+                  const applyPreset = (p: DrillPreset) => {
+                    setDrillStatus(p.status);
+                    setDrillRange(p.range);
+                    setDrillType(p.type);
+                    setDrillSearch(p.search);
+                    setShowPresetsMenu(false);
+                  };
+
+                  const deletePreset = (id: string) => {
+                    const next = presets.filter(p => p.id !== id);
+                    setPresets(next);
+                    savePresets(next);
+                  };
+
+                  const copyShareLink = async () => {
+                    try {
+                      const params = new URLSearchParams();
+                      params.set('drill', drillStatus);
+                      params.set('range', drillRange);
+                      params.set('type', drillType);
+                      if (drillSearch) params.set('q', drillSearch);
+                      const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+                      await navigator.clipboard.writeText(url);
+                      setShareCopied(true);
+                      setTimeout(() => setShareCopied(false), 1800);
+                    } catch {/* ignore */}
+                  };
+
                   return (
                     <motion.div
                       key={drillStatus}
