@@ -1,6 +1,26 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bell, Volume2, AlertTriangle, AlertCircle, Moon } from 'lucide-react';
+import { X, Bell, Volume2, AlertTriangle, AlertCircle, Moon, Play, BellOff } from 'lucide-react';
+
+type Severity = 'critical' | 'stressed';
+
+function playAlertSound(severity: Severity) {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = severity === 'critical' ? 880 : 540;
+    osc.type = 'sine';
+    const dur = severity === 'critical' ? 0.4 : 0.25;
+    gain.gain.setValueAtTime(severity === 'critical' ? 0.15 : 0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + dur);
+    setTimeout(() => ctx.close(), (dur + 0.1) * 1000);
+  } catch {/* ignore */}
+}
 
 export interface NotificationSettings {
   soundEnabled: boolean;
