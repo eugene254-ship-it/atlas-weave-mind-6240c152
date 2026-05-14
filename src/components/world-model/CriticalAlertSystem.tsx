@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, AlertCircle, X, Volume2, VolumeX } from 'lucide-react';
+import { isInQuietHours, type NotificationSettings } from './NotificationSettings';
 
 interface SimulationTick {
   entityId: string;
@@ -26,6 +27,7 @@ interface Props {
   ticks: SimulationTick[];
   entityNames: Record<string, string>;
   onEntitySelect: (id: string) => void;
+  settings?: NotificationSettings;
 }
 
 const STABLE_LIKE = new Set(['stable', 'recovering', 'uncertain']);
@@ -51,10 +53,13 @@ function playAlertSound(severity: Severity) {
   }
 }
 
-export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Props) {
+export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect, settings }: Props) {
   const [alerts, setAlerts] = useState<StatusAlert[]>([]);
   const [flashSeverity, setFlashSeverity] = useState<Severity | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabledLocal, setSoundEnabledLocal] = useState(true);
+  const soundEnabled = (settings?.soundEnabled ?? true) && soundEnabledLocal;
+  const allowStressed = settings?.alertOnStressed ?? true;
+  const allowCritical = settings?.alertOnCritical ?? true;
   const processedRef = useRef(new Set<string>());
 
   // Watch for stable→stressed and stable→critical (or any escalation into stressed/critical)
@@ -64,6 +69,8 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Prop
       const wasOk = STABLE_LIKE.has(t.oldValue);
       const isCritical = t.newValue === 'critical' && t.oldValue !== 'critical';
       const isStressed = t.newValue === 'stressed' && wasOk;
+      if (isCritical && !allowCritical) return false;
+      if (isStressed && !allowStressed) return false;
       return isCritical || isStressed;
     });
 
@@ -90,10 +97,11 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Prop
     if (newAlerts.length > 0) {
       setAlerts(prev => [...newAlerts, ...prev].slice(0, 10));
       setFlashSeverity(highest);
-      if (soundEnabled && highest) playAlertSound(highest);
+      const quiet = settings ? isInQuietHours(settings) : false;
+      if (soundEnabled && !quiet && highest) playAlertSound(highest);
       setTimeout(() => setFlashSeverity(null), 600);
     }
-  }, [ticks, entityNames, soundEnabled]);
+  }, [ticks, entityNames, soundEnabled, allowStressed, allowCritical, settings]);
 
   const dismissAlert = useCallback((id: string) => {
     setAlerts(prev => prev.filter(a => a.id !== id));
@@ -141,7 +149,7 @@ export function CriticalAlertSystem({ ticks, entityNames, onEntitySelect }: Prop
             </span>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
+                onClick={() => setSoundEnabledLocal(!soundEnabledLocal)}
                 className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
                 title={soundEnabled ? 'Mute alerts' : 'Unmute alerts'}
               >

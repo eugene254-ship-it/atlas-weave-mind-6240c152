@@ -1,10 +1,10 @@
 import { useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Filter } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { WorldEntity, EntityStatus } from '@/data/worldModelData';
+import type { WorldEntity, EntityStatus, EntityType } from '@/data/worldModelData';
 import { entityTypeConfig } from '@/data/worldModelData';
 
 interface Props {
@@ -62,21 +62,37 @@ const entityIcons: Record<string, typeof Droplets> = {
 };
 
 // Generate mock historical data for sparklines
-function generateHistoricalData(entity: WorldEntity) {
+function generateHistoricalData(entity: WorldEntity, points = 12) {
   const statusScore: Record<EntityStatus, number> = {
     stable: 90, recovering: 70, uncertain: 55, degraded: 40, stressed: 25, critical: 10,
   };
   const baseScore = statusScore[entity.status];
-  return Array.from({ length: 12 }, (_, i) => ({
+  const mid = points / 2;
+  return Array.from({ length: points }, (_, i) => ({
     time: i,
-    value: Math.max(5, Math.min(95, baseScore + (Math.random() - 0.5) * 30 + (i - 6) * (Math.random() > 0.5 ? 2 : -2))),
+    value: Math.max(5, Math.min(95, baseScore + (Math.random() - 0.5) * 30 + (i - mid) * (Math.random() > 0.5 ? 0.5 : -0.5))),
   }));
 }
+
+type RangeKey = '24h' | '7d' | '30d';
+const RANGE_CONFIG: Record<RangeKey, { points: number; label: string; tickLabel: (i: number, total: number) => string }> = {
+  '24h': { points: 24, label: '24-Hour', tickLabel: (i, t) => `T-${t - 1 - i}h` },
+  '7d': { points: 28, label: '7-Day', tickLabel: (i, t) => `D-${Math.round((t - 1 - i) / 4)}` },
+  '30d': { points: 30, label: '30-Day', tickLabel: (i, t) => `D-${t - 1 - i}` },
+};
+
+const RISK_WEIGHT: Record<EntityStatus, number> = {
+  critical: 100, stressed: 75, degraded: 60, uncertain: 40, recovering: 25, stable: 10,
+};
 
 export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [drillStatus, setDrillStatus] = useState<EntityStatus | null>(null);
+  const [drillRange, setDrillRange] = useState<RangeKey>('24h');
+  const [drillSearch, setDrillSearch] = useState('');
+  const [drillType, setDrillType] = useState<EntityType | 'all'>('all');
+  const [showDrillExport, setShowDrillExport] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
@@ -347,12 +363,33 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
               {/* Drill-down overlay */}
               <AnimatePresence>
                 {drillStatus && (() => {
-                  const drillEntities = entities.filter(e => e.status === drillStatus);
-                  const drillSeries = Array.from({ length: 24 }, (_, i) => {
-                    const point: Record<string, number | string> = { time: `T-${23 - i}h` };
+                  const cohort = entities.filter(e => e.status === drillStatus);
+                  const types = Array.from(new Set(cohort.map(e => e.type)));
+                  const drillEntities = cohort
+                    .filter(e => drillType === 'all' || e.type === drillType)
+                    .filter(e => {
+                      if (!drillSearch.trim()) return true;
+                      const q = drillSearch.toLowerCase();
+                      return e.name.toLowerCase().includes(q)
+                        || e.type.toLowerCase().includes(q)
+                        || (e.location || '').toLowerCase().includes(q);
+                    })
+                    .sort((a, b) => {
+                      const decA = a.metrics.filter(m => m.trend === 'down').length;
+                      const decB = b.metrics.filter(m => m.trend === 'down').length;
+                      const riskA = RISK_WEIGHT[a.status] + decA * 5;
+                      const riskB = RISK_WEIGHT[b.status] + decB * 5;
+                      return riskB - riskA;
+                    });
+
+                  const range = RANGE_CONFIG[drillRange];
+                  const histById: Record<string, { time: number; value: number }[]> = {};
+                  drillEntities.forEach(e => { histById[e.id] = generateHistoricalData(e, range.points); });
+
+                  const drillSeries = Array.from({ length: range.points }, (_, i) => {
+                    const point: Record<string, number | string> = { time: range.tickLabel(i, range.points) };
                     drillEntities.forEach(e => {
-                      const data = generateHistoricalData(e);
-                      const v = data[i % data.length]?.value ?? 50;
+                      const v = histById[e.id]?.[i]?.value ?? 50;
                       point[e.name] = Math.round(v);
                     });
                     return point;
@@ -364,6 +401,80 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                     }, 0) / Math.max(1, drillEntities.length)
                   );
                   const palette = ['hsl(200,70%,55%)', 'hsl(280,60%,60%)', 'hsl(45,75%,55%)', 'hsl(165,65%,45%)', 'hsl(0,75%,55%)', 'hsl(30,85%,55%)', 'hsl(140,55%,50%)', 'hsl(320,60%,60%)'];
+
+                  const exportCohortCSV = () => {
+                    const headers = ['time', ...drillEntities.map(e => e.name)];
+                    const rows = drillSeries.map(r => headers.map(h => String(r[h] ?? '')));
+                    const meta = [
+                      `# ${statusLabels[drillStatus]} cohort · ${range.label} history`,
+                      `# Generated ${new Date().toISOString()}`,
+                      `# Entities: ${drillEntities.length} · Avg score: ${avgScore}`,
+                      '',
+                    ];
+                    const csv = [...meta, headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `cohort-${drillStatus}-${drillRange}.csv`;
+                    a.click();
+                    setShowDrillExport(false);
+                  };
+
+                  const exportCohortPDF = () => {
+                    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                    const pageWidth = doc.internal.pageSize.getWidth();
+                    doc.setFillColor(15, 18, 22);
+                    doc.rect(0, 0, pageWidth, 210, 'F');
+                    doc.setTextColor(200, 220, 230);
+                    doc.setFontSize(20);
+                    doc.text(`${statusLabels[drillStatus]} Cohort — ${range.label} Report`, 20, 25);
+                    doc.setFontSize(10);
+                    doc.setTextColor(120, 140, 150);
+                    doc.text(`Generated ${new Date().toLocaleString()}`, 20, 34);
+                    doc.text(`Entities: ${drillEntities.length} · Average score: ${avgScore}`, 20, 41);
+
+                    autoTable(doc, {
+                      startY: 50,
+                      head: [['Entity', 'Type', 'Location', 'Risk', 'Declining', 'Rising', 'Confidence']],
+                      body: drillEntities.map(e => [
+                        e.name,
+                        entityTypeConfig[e.type].label,
+                        e.location || 'Global',
+                        e.risks[0] || '—',
+                        String(e.metrics.filter(m => m.trend === 'down').length),
+                        String(e.metrics.filter(m => m.trend === 'up').length),
+                        e.confidence,
+                      ]),
+                      styles: { fillColor: [20, 24, 30], textColor: [180, 195, 210], fontSize: 8, cellPadding: 3 },
+                      headStyles: { fillColor: [30, 40, 50], textColor: [100, 210, 190], fontSize: 9, fontStyle: 'bold' },
+                      alternateRowStyles: { fillColor: [25, 30, 38] },
+                    });
+
+                    // Per-entity sparkline data table
+                    doc.addPage();
+                    doc.setFillColor(15, 18, 22);
+                    doc.rect(0, 0, pageWidth, 210, 'F');
+                    doc.setTextColor(200, 220, 230);
+                    doc.setFontSize(16);
+                    doc.text(`Per-Entity ${range.label} History`, 20, 25);
+
+                    drillEntities.forEach((e) => {
+                      const data = histById[e.id] || [];
+                      const min = Math.round(Math.min(...data.map(d => d.value)));
+                      const max = Math.round(Math.max(...data.map(d => d.value)));
+                      const avg = Math.round(data.reduce((s, d) => s + d.value, 0) / Math.max(1, data.length));
+                      autoTable(doc, {
+                        head: [[`${e.name}  ·  min ${min} / avg ${avg} / max ${max}`]],
+                        body: [[data.map(d => Math.round(d.value)).join('  ·  ')]],
+                        styles: { fillColor: [20, 24, 30], textColor: [180, 195, 210], fontSize: 7, cellPadding: 2 },
+                        headStyles: { fillColor: [30, 40, 50], textColor: [100, 210, 190], fontSize: 8, fontStyle: 'bold' },
+                      });
+                    });
+
+                    doc.save(`cohort-${drillStatus}-${drillRange}.pdf`);
+                    setShowDrillExport(false);
+                  };
+
                   return (
                     <motion.div
                       key={drillStatus}
@@ -373,7 +484,7 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                       transition={{ duration: 0.2 }}
                       className="absolute inset-0 z-10 flex flex-col bg-card"
                     >
-                      <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3 border-b border-border/40 px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <button
                             onClick={() => setDrillStatus(null)}
@@ -386,22 +497,102 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                             {statusLabels[drillStatus]} Entities
                           </h3>
                           <span className="font-mono text-[10px] text-muted-foreground">
-                            {drillEntities.length} of {entities.length} · avg score {avgScore}
+                            {drillEntities.length} of {cohort.length} · avg score {avgScore}
                           </span>
                         </div>
+                        <div className="flex items-center gap-2">
+                          {/* Range selector */}
+                          <div className="flex rounded-md border border-border/50 bg-muted/20 p-0.5">
+                            {(Object.keys(RANGE_CONFIG) as RangeKey[]).map(k => (
+                              <button
+                                key={k}
+                                onClick={() => setDrillRange(k)}
+                                className={`rounded-sm px-2 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                                  drillRange === k ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                              >
+                                {k}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Cohort export */}
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowDrillExport(!showDrillExport)}
+                              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                            >
+                              <Download className="h-3 w-3" />
+                              Export
+                            </button>
+                            <AnimatePresence>
+                              {showDrillExport && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -4 }}
+                                  className="absolute right-0 top-full mt-1 z-20 rounded-lg border border-border/50 bg-card shadow-xl"
+                                >
+                                  <button
+                                    onClick={exportCohortPDF}
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 font-mono text-[10px] text-foreground hover:bg-muted/40 rounded-t-lg whitespace-nowrap"
+                                  >
+                                    <FileText className="h-3.5 w-3.5 text-status-critical" />
+                                    Cohort PDF
+                                  </button>
+                                  <button
+                                    onClick={exportCohortCSV}
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 font-mono text-[10px] text-foreground hover:bg-muted/40 rounded-b-lg whitespace-nowrap"
+                                  >
+                                    <FileSpreadsheet className="h-3.5 w-3.5 text-status-stable" />
+                                    Cohort CSV
+                                  </button>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Filter / search bar */}
+                      <div className="flex items-center gap-2 border-b border-border/30 px-4 py-2">
+                        <div className="relative flex-1">
+                          <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                          <input
+                            value={drillSearch}
+                            onChange={e => setDrillSearch(e.target.value)}
+                            placeholder="Search by name, type, or location…"
+                            className="w-full rounded-md border border-border/50 bg-muted/20 py-1.5 pl-7 pr-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Filter className="h-3 w-3 text-muted-foreground" />
+                          <select
+                            value={drillType}
+                            onChange={e => setDrillType(e.target.value as EntityType | 'all')}
+                            className="rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 font-mono text-[10px] text-foreground focus:border-primary focus:outline-none"
+                          >
+                            <option value="all">All types</option>
+                            {types.map(t => (
+                              <option key={t} value={t}>{entityTypeConfig[t].label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <span className="font-mono text-[9px] text-muted-foreground whitespace-nowrap">
+                          Sorted by risk
+                        </span>
                       </div>
 
                       <div className="flex-1 overflow-auto p-4 space-y-4">
                         {/* Combined historical chart */}
                         <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
                           <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                            24-Hour Health History — {statusLabels[drillStatus]} cohort
+                            {range.label} Health History — {statusLabels[drillStatus]} cohort
                           </span>
                           <div className="mt-3 h-56">
                             <ResponsiveContainer width="100%" height="100%">
                               <LineChart data={drillSeries} margin={{ top: 5, right: 12, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} interval={3} />
+                                <XAxis dataKey="time" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} interval={Math.max(1, Math.floor(range.points / 8))} />
                                 <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} domain={[0, 100]} />
                                 <Tooltip
                                   contentStyle={{
@@ -430,7 +621,7 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                         <div className="grid grid-cols-2 gap-3">
                           {drillEntities.map((entity, idx) => {
                             const Icon = entityIcons[entity.id] || Activity;
-                            const histData = generateHistoricalData(entity);
+                            const histData = histById[entity.id] || generateHistoricalData(entity, range.points);
                             const declining = entity.metrics.filter(m => m.trend === 'down').length;
                             const rising = entity.metrics.filter(m => m.trend === 'up').length;
                             return (
@@ -491,7 +682,9 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                           {drillEntities.length === 0 && (
                             <div className="col-span-2 rounded-lg border border-dashed border-border/40 p-6 text-center">
                               <span className="font-mono text-[10px] text-muted-foreground">
-                                No entities currently in {statusLabels[drillStatus].toLowerCase()} state
+                                {cohort.length === 0
+                                  ? `No entities currently in ${statusLabels[drillStatus].toLowerCase()} state`
+                                  : 'No entities match the current filters'}
                               </span>
                             </div>
                           )}

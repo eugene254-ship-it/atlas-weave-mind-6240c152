@@ -24,10 +24,11 @@ import { RelationshipEditor } from '@/components/world-model/RelationshipEditor'
 import { PresenceIndicators } from '@/components/world-model/PresenceIndicators';
 import { CollaborationSystem } from '@/components/world-model/CollaborationSystem';
 import { DashboardOverview } from '@/components/world-model/DashboardOverview';
+import { NotificationSettingsPanel, loadNotificationSettings, type NotificationSettings } from '@/components/world-model/NotificationSettings';
 import { useRealtimeSimulation } from '@/hooks/useRealtimeSimulation';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { AnimatePresence } from 'framer-motion';
-import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame, Link2, Split, LayoutDashboard } from 'lucide-react';
+import { Globe, List, Network, Activity, BookOpen, Clock, Beaker, Waves, Map, ShieldCheck, GitBranch, MessageSquarePlus, Wand2, Flame, Link2, Split, LayoutDashboard, Bell } from 'lucide-react';
 
 const allLayers: EntityType[] = ['ecosystem', 'infrastructure', 'institution', 'community', 'economic', 'health'];
 
@@ -51,6 +52,8 @@ const WorldModel = () => {
   const [showBranching, setShowBranching] = useState(false);
   const [showRelEditor, setShowRelEditor] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showNotifSettings, setShowNotifSettings] = useState(false);
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings>(() => loadNotificationSettings());
   const [customRelationships, setCustomRelationships] = useState<(WorldRelationship & { isCustom?: boolean })[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeRole, setActiveRole] = useState<RoleView>('analyst');
@@ -283,6 +286,14 @@ const WorldModel = () => {
               <LayoutDashboard className="h-3 w-3" />
               <span className="hidden lg:inline">Dashboard</span>
             </button>
+            <button
+              onClick={() => setShowNotifSettings(true)}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Notification Settings"
+            >
+              <Bell className="h-3 w-3" />
+              <span className="hidden lg:inline">Alerts</span>
+            </button>
             <ExportButton selectedEntityId={selectedEntityId} liveEntities={liveEntities} />
           </div>
 
@@ -415,7 +426,15 @@ const WorldModel = () => {
       </div>
 
       {/* Critical Alert System */}
-      <CriticalAlertSystem ticks={ticks} entityNames={entityNames} onEntitySelect={handleEntitySelect} />
+      <CriticalAlertSystem ticks={ticks} entityNames={entityNames} onEntitySelect={handleEntitySelect} settings={notifSettings} />
+
+      {/* Notification Settings */}
+      <NotificationSettingsPanel
+        isOpen={showNotifSettings}
+        onClose={() => setShowNotifSettings(false)}
+        settings={notifSettings}
+        onChange={setNotifSettings}
+      />
 
       {/* Annotation Panel */}
       <AnnotationPanel
