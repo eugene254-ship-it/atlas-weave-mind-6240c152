@@ -158,19 +158,48 @@ export function NotificationSettingsPanel({ isOpen, onClose, settings, onChange 
                   onChange={v => update({ quietHoursEnabled: v })}
                 />
                 {draft.quietHoursEnabled && (
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <HourSelect
-                      label="From"
-                      value={draft.quietStart}
-                      onChange={v => update({ quietStart: v })}
-                    />
-                    <HourSelect
-                      label="To"
-                      value={draft.quietEnd}
-                      onChange={v => update({ quietEnd: v })}
-                    />
-                  </div>
+                  <>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <HourSelect
+                        label="From"
+                        value={draft.quietStart}
+                        onChange={v => update({ quietStart: v })}
+                      />
+                      <HourSelect
+                        label="To"
+                        value={draft.quietEnd}
+                        onChange={v => update({ quietEnd: v })}
+                      />
+                    </div>
+                    <QuietHoursPreview settings={draft} />
+                  </>
                 )}
+              </div>
+
+              <div className="border-t border-border/30" />
+
+              {/* Test alerts */}
+              <div>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Test alerts</span>
+                <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                  Preview the tone and severity feedback before live alerts fire.
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <TestButton
+                    severity="stressed"
+                    disabled={!draft.alertOnStressed}
+                    quiet={isInQuietHours(draft)}
+                    soundOff={!draft.soundEnabled}
+                    onPlay={() => playAlertSound('stressed')}
+                  />
+                  <TestButton
+                    severity="critical"
+                    disabled={!draft.alertOnCritical}
+                    quiet={isInQuietHours(draft)}
+                    soundOff={!draft.soundEnabled}
+                    onPlay={() => playAlertSound('critical')}
+                  />
+                </div>
               </div>
             </div>
 
