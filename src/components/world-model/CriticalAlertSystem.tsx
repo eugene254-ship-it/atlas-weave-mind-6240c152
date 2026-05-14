@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, AlertCircle, X, Volume2, VolumeX } from 'lucide-react';
+import { isInQuietHours, type NotificationSettings } from './NotificationSettings';
 
 interface SimulationTick {
   entityId: string;
