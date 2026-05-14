@@ -1,10 +1,10 @@
 import { useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Filter } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { WorldEntity, EntityStatus } from '@/data/worldModelData';
+import type { WorldEntity, EntityStatus, EntityType } from '@/data/worldModelData';
 import { entityTypeConfig } from '@/data/worldModelData';
 
 interface Props {
