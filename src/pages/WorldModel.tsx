@@ -426,7 +426,15 @@ const WorldModel = () => {
       </div>
 
       {/* Critical Alert System */}
-      <CriticalAlertSystem ticks={ticks} entityNames={entityNames} onEntitySelect={handleEntitySelect} />
+      <CriticalAlertSystem ticks={ticks} entityNames={entityNames} onEntitySelect={handleEntitySelect} settings={notifSettings} />
+
+      {/* Notification Settings */}
+      <NotificationSettingsPanel
+        isOpen={showNotifSettings}
+        onClose={() => setShowNotifSettings(false)}
+        settings={notifSettings}
+        onChange={setNotifSettings}
+      />
 
       {/* Annotation Panel */}
       <AnnotationPanel
