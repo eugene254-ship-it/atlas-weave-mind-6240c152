@@ -1,16 +1,21 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Filter, Bookmark, Share2, Check, Trash2 } from 'lucide-react';
+import { X, Activity, TrendingDown, TrendingUp, Minus, AlertTriangle, Shield, Droplets, Wheat, Heart, Building2, TreePine, Zap, Download, FileText, FileSpreadsheet, ChevronLeft, ChevronRight, Search, Filter, Bookmark, Share2, Check, Trash2, Upload, FileJson } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { WorldEntity, EntityStatus, EntityType } from '@/data/worldModelData';
 import { entityTypeConfig } from '@/data/worldModelData';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   entities: WorldEntity[];
+  selectedEntityId?: string | null;
   onEntitySelect: (id: string) => void;
 }
 
@@ -109,7 +114,7 @@ function savePresets(presets: DrillPreset[]) {
   try { localStorage.setItem(PRESETS_KEY, JSON.stringify(presets)); } catch {/* ignore */}
 }
 
-export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
+export function DashboardOverview({ isOpen, onClose, entities, selectedEntityId, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [drillStatus, setDrillStatus] = useState<EntityStatus | null>(null);
@@ -122,6 +127,9 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
   const [presetName, setPresetName] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
   const [perEntityMenu, setPerEntityMenu] = useState<string | null>(null);
+  const [pendingDeletePreset, setPendingDeletePreset] = useState<DrillPreset | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Load drill state from URL on open
   useEffect(() => {
@@ -138,7 +146,10 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
         const q = params.get('q');
         if (q) setDrillSearch(q);
       }
+      const ent = params.get('entity');
+      if (ent && entities.some(e => e.id === ent)) onEntitySelect(ent);
     } catch {/* ignore */}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Sync drill state to URL
@@ -154,10 +165,53 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
       } else {
         params.delete('drill'); params.delete('range'); params.delete('type'); params.delete('q');
       }
+      if (selectedEntityId) params.set('entity', selectedEntityId);
+      else params.delete('entity');
       const qs = params.toString();
       window.history.replaceState(null, '', `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`);
     } catch {/* ignore */}
-  }, [isOpen, drillStatus, drillRange, drillType, drillSearch]);
+  }, [isOpen, drillStatus, drillRange, drillType, drillSearch, selectedEntityId]);
+
+  const exportPresetsJSON = useCallback(() => {
+    const payload = {
+      type: 'atlas-drill-presets',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      presets,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `atlas-drill-presets-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  }, [presets]);
+
+  const importPresetsJSON = useCallback((file: File) => {
+    setImportError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result));
+        const incoming: DrillPreset[] = Array.isArray(data) ? data : data.presets;
+        if (!Array.isArray(incoming)) throw new Error('Invalid format');
+        const valid = incoming.filter((p): p is DrillPreset =>
+          p && typeof p.id === 'string' && typeof p.name === 'string'
+          && ['stable', 'stressed', 'critical', 'recovering', 'uncertain', 'degraded'].includes(p.status)
+          && ['24h', '7d', '30d'].includes(p.range)
+        );
+        if (valid.length === 0) throw new Error('No valid presets in file');
+        const existing = new Map(presets.map(p => [p.id, p]));
+        valid.forEach(p => existing.set(p.id, p));
+        const merged = Array.from(existing.values()).slice(0, 50);
+        setPresets(merged);
+        savePresets(merged);
+      } catch (e) {
+        setImportError(e instanceof Error ? e.message : 'Import failed');
+        setTimeout(() => setImportError(null), 3500);
+      }
+    };
+    reader.readAsText(file);
+  }, [presets]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
@@ -353,6 +407,7 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
   }, [entities, systemHealth]);
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -645,6 +700,7 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                       params.set('range', drillRange);
                       params.set('type', drillType);
                       if (drillSearch) params.set('q', drillSearch);
+                      if (selectedEntityId) params.set('entity', selectedEntityId);
                       const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
                       await navigator.clipboard.writeText(url);
                       setShareCopied(true);
@@ -784,7 +840,7 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                                           </div>
                                         </button>
                                         <button
-                                          onClick={() => deletePreset(p.id)}
+                                          onClick={() => setPendingDeletePreset(p)}
                                           className="rounded p-1 text-muted-foreground opacity-0 transition-all hover:text-destructive group-hover:opacity-100"
                                           title="Delete preset"
                                         >
@@ -793,6 +849,42 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
                                       </div>
                                     ))}
                                   </div>
+                                  {/* JSON import / export footer */}
+                                  <div className="flex items-center justify-between gap-1.5 border-t border-border/40 p-2">
+                                    <button
+                                      onClick={exportPresetsJSON}
+                                      disabled={presets.length === 0}
+                                      className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-muted/30 px-2 py-1.5 font-mono text-[9px] uppercase tracking-wider text-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
+                                      title="Export all presets as JSON"
+                                    >
+                                      <FileJson className="h-3 w-3" />
+                                      Export JSON
+                                    </button>
+                                    <button
+                                      onClick={() => fileInputRef.current?.click()}
+                                      className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-muted/30 px-2 py-1.5 font-mono text-[9px] uppercase tracking-wider text-foreground transition-colors hover:bg-muted/50"
+                                      title="Import presets from JSON"
+                                    >
+                                      <Upload className="h-3 w-3" />
+                                      Import JSON
+                                    </button>
+                                    <input
+                                      ref={fileInputRef}
+                                      type="file"
+                                      accept="application/json,.json"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) importPresetsJSON(f);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </div>
+                                  {importError && (
+                                    <div className="border-t border-destructive/30 bg-destructive/10 px-2 py-1.5 font-mono text-[9px] text-destructive">
+                                      Import error: {importError}
+                                    </div>
+                                  )}
                                 </motion.div>
                               )}
                             </AnimatePresence>
@@ -1193,5 +1285,40 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
         </motion.div>
       )}
     </AnimatePresence>
+    <AlertDialog open={!!pendingDeletePreset} onOpenChange={(o) => !o && setPendingDeletePreset(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this preset?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {pendingDeletePreset && (
+              <>
+                <span className="font-mono text-foreground">{pendingDeletePreset.name}</span>
+                <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
+                  {statusLabels[pendingDeletePreset.status]} · {RANGE_CONFIG[pendingDeletePreset.range].label} · {pendingDeletePreset.type === 'all' ? 'all types' : entityTypeConfig[pendingDeletePreset.type].label}
+                </span>
+                <span className="mt-2 block">This preset will be permanently removed from this browser. Export presets to JSON first if you'd like a backup.</span>
+              </>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (pendingDeletePreset) {
+                const next = presets.filter(p => p.id !== pendingDeletePreset.id);
+                setPresets(next);
+                savePresets(next);
+              }
+              setPendingDeletePreset(null);
+            }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Delete preset
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
