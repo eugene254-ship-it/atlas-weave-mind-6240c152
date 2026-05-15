@@ -201,6 +201,11 @@ export function NotificationSettingsPanel({ isOpen, onClose, settings, onChange 
                   />
                 </div>
               </div>
+
+              <div className="border-t border-border/30" />
+
+              {/* Boundary test harness */}
+              <BoundaryHarness settings={draft} onPlay={(sev) => playAlertSound(sev)} />
             </div>
 
             <div className="flex items-center justify-between border-t border-border/50 px-4 py-3">
