@@ -1284,5 +1284,40 @@ export function DashboardOverview({ isOpen, onClose, entities, selectedEntityId,
         </motion.div>
       )}
     </AnimatePresence>
+    <AlertDialog open={!!pendingDeletePreset} onOpenChange={(o) => !o && setPendingDeletePreset(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this preset?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {pendingDeletePreset && (
+              <>
+                <span className="font-mono text-foreground">{pendingDeletePreset.name}</span>
+                <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
+                  {statusLabels[pendingDeletePreset.status]} · {RANGE_CONFIG[pendingDeletePreset.range].label} · {pendingDeletePreset.type === 'all' ? 'all types' : entityTypeConfig[pendingDeletePreset.type].label}
+                </span>
+                <span className="mt-2 block">This preset will be permanently removed from this browser. Export presets to JSON first if you'd like a backup.</span>
+              </>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (pendingDeletePreset) {
+                const next = presets.filter(p => p.id !== pendingDeletePreset.id);
+                setPresets(next);
+                savePresets(next);
+              }
+              setPendingDeletePreset(null);
+            }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Delete preset
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
