@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bell, Volume2, AlertTriangle, AlertCircle, Moon, Play, BellOff } from 'lucide-react';
+import { X, Bell, Volume2, AlertTriangle, AlertCircle, Moon, Play, BellOff, FlaskConical, Check, AlertOctagon } from 'lucide-react';
 
 type Severity = 'critical' | 'stressed';
 
