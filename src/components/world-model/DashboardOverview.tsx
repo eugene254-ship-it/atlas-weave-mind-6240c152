@@ -839,7 +839,7 @@ export function DashboardOverview({ isOpen, onClose, entities, selectedEntityId,
                                           </div>
                                         </button>
                                         <button
-                                          onClick={() => deletePreset(p.id)}
+                                          onClick={() => setPendingDeletePreset(p)}
                                           className="rounded p-1 text-muted-foreground opacity-0 transition-all hover:text-destructive group-hover:opacity-100"
                                           title="Delete preset"
                                         >
@@ -848,6 +848,42 @@ export function DashboardOverview({ isOpen, onClose, entities, selectedEntityId,
                                       </div>
                                     ))}
                                   </div>
+                                  {/* JSON import / export footer */}
+                                  <div className="flex items-center justify-between gap-1.5 border-t border-border/40 p-2">
+                                    <button
+                                      onClick={exportPresetsJSON}
+                                      disabled={presets.length === 0}
+                                      className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-muted/30 px-2 py-1.5 font-mono text-[9px] uppercase tracking-wider text-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
+                                      title="Export all presets as JSON"
+                                    >
+                                      <FileJson className="h-3 w-3" />
+                                      Export JSON
+                                    </button>
+                                    <button
+                                      onClick={() => fileInputRef.current?.click()}
+                                      className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-muted/30 px-2 py-1.5 font-mono text-[9px] uppercase tracking-wider text-foreground transition-colors hover:bg-muted/50"
+                                      title="Import presets from JSON"
+                                    >
+                                      <Upload className="h-3 w-3" />
+                                      Import JSON
+                                    </button>
+                                    <input
+                                      ref={fileInputRef}
+                                      type="file"
+                                      accept="application/json,.json"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) importPresetsJSON(f);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </div>
+                                  {importError && (
+                                    <div className="border-t border-destructive/30 bg-destructive/10 px-2 py-1.5 font-mono text-[9px] text-destructive">
+                                      Import error: {importError}
+                                    </div>
+                                  )}
                                 </motion.div>
                               )}
                             </AnimatePresence>
