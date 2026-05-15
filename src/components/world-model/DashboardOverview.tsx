@@ -699,6 +699,7 @@ export function DashboardOverview({ isOpen, onClose, entities, selectedEntityId,
                       params.set('range', drillRange);
                       params.set('type', drillType);
                       if (drillSearch) params.set('q', drillSearch);
+                      if (selectedEntityId) params.set('entity', selectedEntityId);
                       const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
                       await navigator.clipboard.writeText(url);
                       setShareCopied(true);
