@@ -495,6 +495,7 @@ const WorldModel = () => {
         isOpen={showDashboard}
         onClose={() => setShowDashboard(false)}
         entities={liveEntities}
+        selectedEntityId={selectedEntityId}
         onEntitySelect={handleEntitySelect}
       />
 
