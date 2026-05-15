@@ -114,7 +114,7 @@ function savePresets(presets: DrillPreset[]) {
   try { localStorage.setItem(PRESETS_KEY, JSON.stringify(presets)); } catch {/* ignore */}
 }
 
-export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }: Props) {
+export function DashboardOverview({ isOpen, onClose, entities, selectedEntityId, onEntitySelect }: Props) {
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [drillStatus, setDrillStatus] = useState<EntityStatus | null>(null);
@@ -127,6 +127,9 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
   const [presetName, setPresetName] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
   const [perEntityMenu, setPerEntityMenu] = useState<string | null>(null);
+  const [pendingDeletePreset, setPendingDeletePreset] = useState<DrillPreset | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Load drill state from URL on open
   useEffect(() => {
@@ -143,7 +146,10 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
         const q = params.get('q');
         if (q) setDrillSearch(q);
       }
+      const ent = params.get('entity');
+      if (ent && entities.some(e => e.id === ent)) onEntitySelect(ent);
     } catch {/* ignore */}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Sync drill state to URL
@@ -159,10 +165,53 @@ export function DashboardOverview({ isOpen, onClose, entities, onEntitySelect }:
       } else {
         params.delete('drill'); params.delete('range'); params.delete('type'); params.delete('q');
       }
+      if (selectedEntityId) params.set('entity', selectedEntityId);
+      else params.delete('entity');
       const qs = params.toString();
       window.history.replaceState(null, '', `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`);
     } catch {/* ignore */}
-  }, [isOpen, drillStatus, drillRange, drillType, drillSearch]);
+  }, [isOpen, drillStatus, drillRange, drillType, drillSearch, selectedEntityId]);
+
+  const exportPresetsJSON = useCallback(() => {
+    const payload = {
+      type: 'atlas-drill-presets',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      presets,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `atlas-drill-presets-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  }, [presets]);
+
+  const importPresetsJSON = useCallback((file: File) => {
+    setImportError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result));
+        const incoming: DrillPreset[] = Array.isArray(data) ? data : data.presets;
+        if (!Array.isArray(incoming)) throw new Error('Invalid format');
+        const valid = incoming.filter((p): p is DrillPreset =>
+          p && typeof p.id === 'string' && typeof p.name === 'string'
+          && ['stable', 'stressed', 'critical', 'recovering', 'uncertain', 'degraded'].includes(p.status)
+          && ['24h', '7d', '30d'].includes(p.range)
+        );
+        if (valid.length === 0) throw new Error('No valid presets in file');
+        const existing = new Map(presets.map(p => [p.id, p]));
+        valid.forEach(p => existing.set(p.id, p));
+        const merged = Array.from(existing.values()).slice(0, 50);
+        setPresets(merged);
+        savePresets(merged);
+      } catch (e) {
+        setImportError(e instanceof Error ? e.message : 'Import failed');
+        setTimeout(() => setImportError(null), 3500);
+      }
+    };
+    reader.readAsText(file);
+  }, [presets]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<EntityStatus, number> = {
