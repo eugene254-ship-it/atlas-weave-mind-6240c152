@@ -353,3 +353,173 @@ function TestButton({ severity, disabled, quiet, soundOff, onPlay }: {
     </button>
   );
 }
+
+// ---------------- Boundary test harness ----------------
+
+type HarnessCase = {
+  id: string;
+  label: string;
+  start: number;
+  end: number;
+  hour: number;
+  expected: boolean;
+  category: 'exact-start' | 'exact-end' | 'inside' | 'outside' | 'midnight-wrap' | 'same-hour';
+};
+
+const BOUNDARY_CASES: HarnessCase[] = [
+  // Non-wrapping window 09–17
+  { id: 'nw-before',      label: '09–17 · 08:30 (just before start)',  start: 9, end: 17, hour: 8,  expected: false, category: 'outside' },
+  { id: 'nw-start',       label: '09–17 · 09:00 (exact start, inclusive)', start: 9, end: 17, hour: 9,  expected: true,  category: 'exact-start' },
+  { id: 'nw-mid',         label: '09–17 · 12:00 (inside window)',      start: 9, end: 17, hour: 12, expected: true,  category: 'inside' },
+  { id: 'nw-last',        label: '09–17 · 16:59 (last minute inside)', start: 9, end: 17, hour: 16, expected: true,  category: 'inside' },
+  { id: 'nw-end',         label: '09–17 · 17:00 (exact end, exclusive)', start: 9, end: 17, hour: 17, expected: false, category: 'exact-end' },
+  // Wrapping window 22–07
+  { id: 'wr-before',      label: '22–07 · 21:30 (just before start)',  start: 22, end: 7, hour: 21, expected: false, category: 'outside' },
+  { id: 'wr-start',       label: '22–07 · 22:00 (exact start)',        start: 22, end: 7, hour: 22, expected: true,  category: 'exact-start' },
+  { id: 'wr-late',        label: '22–07 · 23:00 (pre-midnight)',       start: 22, end: 7, hour: 23, expected: true,  category: 'midnight-wrap' },
+  { id: 'wr-midnight',    label: '22–07 · 00:00 (midnight wrap)',      start: 22, end: 7, hour: 0,  expected: true,  category: 'midnight-wrap' },
+  { id: 'wr-early',       label: '22–07 · 03:00 (post-midnight)',      start: 22, end: 7, hour: 3,  expected: true,  category: 'midnight-wrap' },
+  { id: 'wr-last',        label: '22–07 · 06:59 (last hour inside)',   start: 22, end: 7, hour: 6,  expected: true,  category: 'inside' },
+  { id: 'wr-end',         label: '22–07 · 07:00 (exact end, exclusive)', start: 22, end: 7, hour: 7,  expected: false, category: 'exact-end' },
+  { id: 'wr-after',       label: '22–07 · 08:00 (after end)',          start: 22, end: 7, hour: 8,  expected: false, category: 'outside' },
+  // Same start == end → always inactive
+  { id: 'sh-zero',        label: '10–10 · 10:00 (start equals end)',   start: 10, end: 10, hour: 10, expected: false, category: 'same-hour' },
+  { id: 'sh-other',       label: '10–10 · 03:00 (start equals end)',   start: 10, end: 10, hour: 3,  expected: false, category: 'same-hour' },
+];
+
+function makeMockDate(hour: number): Date {
+  const d = new Date();
+  d.setHours(hour, 30, 0, 0);
+  return d;
+}
+
+function BoundaryHarness({ settings, onPlay }: { settings: NotificationSettings; onPlay: (s: Severity) => void }) {
+  const [open, setOpen] = useState(false);
+  const [running, setRunning] = useState<string | null>(null);
+
+  const results = useMemo(() => {
+    return BOUNDARY_CASES.map(c => {
+      const cfg: NotificationSettings = {
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+        quietHoursEnabled: true,
+        quietStart: c.start,
+        quietEnd: c.end,
+      };
+      const actual = isInQuietHours(cfg, makeMockDate(c.hour));
+      return { ...c, actual, pass: actual === c.expected };
+    });
+  }, []);
+
+  const passCount = results.filter(r => r.pass).length;
+  const failCount = results.length - passCount;
+
+  const runSeverity = (sev: Severity, suppressed: boolean) => {
+    setRunning(sev + (suppressed ? '-supp' : ''));
+    if (!suppressed && settings.soundEnabled) onPlay(sev);
+    window.setTimeout(() => setRunning(null), 600);
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center gap-2 rounded-md p-2 transition-colors hover:bg-muted/30"
+      >
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/40">
+          <FlaskConical className="h-3.5 w-3.5 text-foreground/70" />
+        </div>
+        <div className="min-w-0 flex-1 text-left">
+          <div className="font-mono text-[11px] font-medium text-foreground">Boundary test harness</div>
+          <div className="font-mono text-[9px] text-muted-foreground">
+            Verify quiet-hour logic at exact start/end and midnight wrap
+          </div>
+        </div>
+        <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] ${
+          failCount === 0 ? 'bg-status-stable/15 text-status-stable' : 'bg-status-critical/15 text-status-critical'
+        }`}>
+          {passCount}/{results.length} pass
+        </span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 space-y-1.5 rounded-md border border-border/40 bg-muted/10 p-2">
+              {/* Severity simulators */}
+              <div className="grid grid-cols-2 gap-2 border-b border-border/30 pb-2">
+                {(['stressed', 'critical'] as Severity[]).map(sev => {
+                  const suppressedNow = isInQuietHours(settings);
+                  const Icon = sev === 'critical' ? AlertTriangle : AlertCircle;
+                  const isRunning = running?.startsWith(sev);
+                  return (
+                    <button
+                      key={sev}
+                      type="button"
+                      onClick={() => runSeverity(sev, suppressedNow)}
+                      className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 transition-all ${
+                        sev === 'critical'
+                          ? 'border-status-critical/30 bg-status-critical/5 hover:bg-status-critical/10'
+                          : 'border-status-stressed/30 bg-status-stressed/5 hover:bg-status-stressed/10'
+                      } ${isRunning ? 'ring-2 ring-offset-1 ring-offset-card ' + (sev === 'critical' ? 'ring-status-critical/60' : 'ring-status-stressed/60') : ''}`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Icon className={`h-3 w-3 ${sev === 'critical' ? 'text-status-critical' : 'text-status-stressed'}`} />
+                        <span className="font-mono text-[10px] text-foreground capitalize">{sev}</span>
+                      </span>
+                      <span className={`font-mono text-[8px] uppercase tracking-wider ${
+                        suppressedNow ? 'text-status-stable' : 'text-foreground/60'
+                      }`}>
+                        {suppressedNow ? 'suppressed' : 'fires'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Boundary table */}
+              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1 px-1 pt-1 font-mono text-[8px] uppercase tracking-wider text-muted-foreground">
+                <span>Case</span>
+                <span>Expect</span>
+                <span>Actual</span>
+              </div>
+              <div className="space-y-0.5">
+                {results.map(r => (
+                  <div
+                    key={r.id}
+                    className={`grid grid-cols-[1fr_auto_auto] items-center gap-x-2 rounded-sm px-1 py-1 font-mono text-[10px] ${
+                      r.pass ? 'text-foreground/80' : 'bg-status-critical/10 text-status-critical'
+                    }`}
+                  >
+                    <span className="truncate">{r.label}</span>
+                    <span className="text-[9px] text-muted-foreground">
+                      {r.expected ? 'quiet' : 'alerts'}
+                    </span>
+                    <span className="flex items-center gap-1 text-[9px]">
+                      {r.actual ? 'quiet' : 'alerts'}
+                      {r.pass
+                        ? <Check className="h-3 w-3 text-status-stable" />
+                        : <AlertOctagon className="h-3 w-3 text-status-critical" />}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-border/30 pt-1.5 font-mono text-[8px] text-muted-foreground">
+                <span>Logic: start inclusive, end exclusive · wraps when start &gt; end</span>
+                <span className={failCount === 0 ? 'text-status-stable' : 'text-status-critical'}>
+                  {failCount === 0 ? 'all checks passing' : `${failCount} failing`}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
