@@ -407,6 +407,7 @@ export function DashboardOverview({ isOpen, onClose, entities, selectedEntityId,
   }, [entities, systemHealth]);
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <motion.div
