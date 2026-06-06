@@ -1,6 +1,6 @@
 import { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import { relationships, nodePositions, entityTypeConfig, type WorldEntity } from '@/data/worldModelData';
-import { ZoomIn, ZoomOut, Maximize2, Locate } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Locate, Pin, Keyboard } from 'lucide-react';
 
 interface CustomRelationship {
   id: string;
@@ -57,6 +57,7 @@ interface Particle {
 
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 4;
+const VIRTUAL_MARGIN = 80; // screen-px margin around viewport for culling
 
 export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, activeLayers, hoveredEntityId, onEntityHover, showFlowParticles = true, customRelationships = [], entities }: Props) {
   const pad = 60;
@@ -68,7 +69,11 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [tooltipMode, setTooltipMode] = useState<'hover' | 'pinned'>('hover');
+  const [pinnedEntityId, setPinnedEntityId] = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const visibleEntities = useMemo(() =>
     entities ? entities.filter(e => activeLayers.includes(e.type)) : [],
@@ -96,6 +101,57 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
     );
   }, [selectedEntityId]);
 
+  // ---- Viewport-based virtualization ----
+  const worldViewport = useMemo(() => {
+    const margin = VIRTUAL_MARGIN / transform.k;
+    return {
+      x: -transform.x / transform.k - margin,
+      y: -transform.y / transform.k - margin,
+      x2: (-transform.x + width) / transform.k + margin,
+      y2: (-transform.y + height) / transform.k + margin,
+    };
+  }, [transform, width, height]);
+
+  const inView = useCallback((p: { x: number; y: number }) =>
+    p.x >= worldViewport.x && p.x <= worldViewport.x2 &&
+    p.y >= worldViewport.y && p.y <= worldViewport.y2,
+    [worldViewport]
+  );
+
+  const culledEntities = useMemo(() =>
+    visibleEntities.filter(e => inView(getPos(e.id))),
+    [visibleEntities, inView, getPos]
+  );
+
+  const culledRelationships = useMemo(() =>
+    visibleRelationships.filter(r => inView(getPos(r.source)) || inView(getPos(r.target))),
+    [visibleRelationships, inView, getPos]
+  );
+
+  const culledRelIds = useMemo(() => new Set(culledRelationships.map(r => r.id)), [culledRelationships]);
+
+  // Always render the selected node + its immediate neighbours so the focused
+  // context never disappears even when scrolled off screen.
+  const forcedIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (selectedEntityId) {
+      ids.add(selectedEntityId);
+      relationships.forEach(r => {
+        if (r.source === selectedEntityId) ids.add(r.target);
+        if (r.target === selectedEntityId) ids.add(r.source);
+      });
+    }
+    if (pinnedEntityId) ids.add(pinnedEntityId);
+    return ids;
+  }, [selectedEntityId, pinnedEntityId]);
+
+  const renderEntities = useMemo(() => {
+    const set = new Set(culledEntities.map(e => e.id));
+    const extras = visibleEntities.filter(e => !set.has(e.id) && forcedIds.has(e.id));
+    return [...culledEntities, ...extras];
+  }, [culledEntities, visibleEntities, forcedIds]);
+
+  // Particle animation (only for culled rels)
   useEffect(() => {
     if (!showFlowParticles) { setParticles([]); return; }
     const initial: Particle[] = [];
@@ -118,7 +174,7 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
     return () => clearInterval(interval);
   }, [showFlowParticles, visibleRelationships]);
 
-  // Pan / zoom handlers
+  // ---- Pan / zoom handlers ----
   const handleWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault();
     const rect = svgRef.current?.getBoundingClientRect();
@@ -152,16 +208,16 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
 
   const endPan = useCallback(() => { isPanningRef.current = false; }, []);
 
-  const zoomBy = useCallback((factor: number) => {
+  const zoomBy = useCallback((factor: number, cx?: number, cy?: number) => {
+    const ax = cx ?? width / 2;
+    const ay = cy ?? height / 2;
     setTransform(prev => {
       const nextK = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev.k * factor));
       const realScale = nextK / prev.k;
-      const cx = width / 2;
-      const cy = height / 2;
       return {
         k: nextK,
-        x: cx - (cx - prev.x) * realScale,
-        y: cy - (cy - prev.y) * realScale,
+        x: ax - (ax - prev.x) * realScale,
+        y: ay - (ay - prev.y) * realScale,
       };
     });
   }, [width, height]);
@@ -175,20 +231,111 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
     setTransform({ k, x: width / 2 - p.x * k, y: height / 2 - p.y * k });
   }, [selectedEntityId, getPos, width, height, resetView]);
 
-  // Tooltip tracking
-  useEffect(() => {
-    if (!hoveredEntityId) { setTooltipPos(null); return; }
-    const p = getPos(hoveredEntityId);
-    setTooltipPos({ x: p.x * transform.k + transform.x, y: p.y * transform.k + transform.y });
-  }, [hoveredEntityId, transform, getPos]);
+  const panBy = useCallback((dx: number, dy: number) => {
+    setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+  }, []);
 
-  const hoveredEntity = hoveredEntityId ? visibleEntities.find(e => e.id === hoveredEntityId) : null;
-  const hoveredConnCount = hoveredEntityId
-    ? relationships.filter(r => r.source === hoveredEntityId || r.target === hoveredEntityId).length
+  // ---- Keyboard shortcuts ----
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      switch (e.key) {
+        case '+': case '=':
+          e.preventDefault(); zoomBy(1.25); break;
+        case '-': case '_':
+          e.preventDefault(); zoomBy(1 / 1.25); break;
+        case '0':
+          e.preventDefault(); resetView(); break;
+        case 'f': case 'F':
+          e.preventDefault(); focusSelected(); break;
+        case 'p': case 'P':
+          e.preventDefault();
+          setTooltipMode(m => {
+            const next = m === 'hover' ? 'pinned' : 'hover';
+            if (next === 'hover') setPinnedEntityId(null);
+            return next;
+          });
+          break;
+        case '?':
+          e.preventDefault(); setShowShortcuts(s => !s); break;
+        case 'ArrowUp':    e.preventDefault(); panBy(0, 60); break;
+        case 'ArrowDown':  e.preventDefault(); panBy(0, -60); break;
+        case 'ArrowLeft':  e.preventDefault(); panBy(60, 0); break;
+        case 'ArrowRight': e.preventDefault(); panBy(-60, 0); break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [zoomBy, resetView, focusSelected, panBy]);
+
+  // ---- Tooltip tracking ----
+  const tooltipEntityId = tooltipMode === 'pinned' ? pinnedEntityId : hoveredEntityId;
+  useEffect(() => {
+    if (!tooltipEntityId) { setTooltipPos(null); return; }
+    const p = getPos(tooltipEntityId);
+    setTooltipPos({ x: p.x * transform.k + transform.x, y: p.y * transform.k + transform.y });
+  }, [tooltipEntityId, transform, getPos]);
+
+  const tooltipEntity = tooltipEntityId ? visibleEntities.find(e => e.id === tooltipEntityId) : null;
+  const tooltipConnCount = tooltipEntityId
+    ? relationships.filter(r => r.source === tooltipEntityId || r.target === tooltipEntityId).length
     : 0;
 
+  const handleNodeClick = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (tooltipMode === 'pinned') {
+      setPinnedEntityId(prev => prev === id ? null : id);
+    }
+    onEntitySelect(id);
+  }, [tooltipMode, onEntitySelect]);
+
+  // ---- Minimap geometry ----
+  const miniW = 180;
+  const miniH = 120;
+  const miniScaleX = miniW / width;
+  const miniScaleY = miniH / height;
+  const vpRect = {
+    x: (-transform.x / transform.k) * miniScaleX,
+    y: (-transform.y / transform.k) * miniScaleY,
+    w: (width / transform.k) * miniScaleX,
+    h: (height / transform.k) * miniScaleY,
+  };
+  const miniDragRef = useRef<{ dragging: boolean; offsetX: number; offsetY: number }>({ dragging: false, offsetX: 0, offsetY: 0 });
+  const miniSvgRef = useRef<SVGSVGElement>(null);
+
+  const centerOnWorldPoint = useCallback((wx: number, wy: number) => {
+    setTransform(prev => ({ k: prev.k, x: width / 2 - wx * prev.k, y: height / 2 - wy * prev.k }));
+  }, [width, height]);
+
+  const miniPointToWorld = useCallback((clientX: number, clientY: number) => {
+    const rect = miniSvgRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const mx = clientX - rect.left;
+    const my = clientY - rect.top;
+    return { x: mx / miniScaleX, y: my / miniScaleY };
+  }, [miniScaleX, miniScaleY]);
+
+  const handleMiniDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const pt = miniPointToWorld(e.clientX, e.clientY);
+    if (!pt) return;
+    miniDragRef.current = { dragging: true, offsetX: 0, offsetY: 0 };
+    centerOnWorldPoint(pt.x, pt.y);
+  }, [centerOnWorldPoint, miniPointToWorld]);
+
+  const handleMiniMove = useCallback((e: React.MouseEvent) => {
+    if (!miniDragRef.current.dragging) return;
+    const pt = miniPointToWorld(e.clientX, e.clientY);
+    if (!pt) return;
+    centerOnWorldPoint(pt.x, pt.y);
+  }, [centerOnWorldPoint, miniPointToWorld]);
+
+  const endMiniDrag = useCallback(() => { miniDragRef.current.dragging = false; }, []);
+
   return (
-    <div className="absolute inset-0">
+    <div ref={containerRef} className="absolute inset-0">
       <svg
         ref={svgRef}
         width={width}
@@ -220,7 +367,7 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
 
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
           {/* Edges */}
-          {visibleRelationships.map(r => {
+          {culledRelationships.map(r => {
             const s = getPos(r.source);
             const t = getPos(r.target);
             const isActive = selectedEntityId === r.source || selectedEntityId === r.target;
@@ -236,21 +383,16 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
                   markerEnd="url(#arrowhead)"
                 />
                 {isActive && (
-                  <line
-                    x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                    stroke="hsl(175, 70%, 50%)"
-                    strokeWidth={1}
-                    strokeOpacity={0.3}
-                    strokeDasharray="4,4"
-                    className="animate-flow"
-                  />
+                  <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="hsl(175, 70%, 50%)"
+                    strokeWidth={1} strokeOpacity={0.3} strokeDasharray="4,4" className="animate-flow" />
                 )}
               </g>
             );
           })}
 
-          {/* Flow Particles */}
+          {/* Flow Particles (only on visible edges) */}
           {showFlowParticles && particles.map(particle => {
+            if (!culledRelIds.has(particle.relId)) return null;
             const rel = visibleRelationships.find(r => r.id === particle.relId);
             if (!rel) return null;
             const s = getPos(rel.source);
@@ -265,30 +407,34 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
             );
           })}
 
-          {/* Custom Relationship Edges */}
-          {customRelationships.filter(r => visibleIds.has(r.source) && visibleIds.has(r.target)).map(r => {
-            const s = getPos(r.source);
-            const t = getPos(r.target);
-            const isActive = selectedEntityId === r.source || selectedEntityId === r.target;
-            return (
-              <g key={r.id}>
-                <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="hsl(270, 60%, 60%)"
-                  strokeWidth={isActive ? 2.5 : 1.5} strokeOpacity={isActive ? 0.8 : 0.5}
-                  strokeDasharray="6,3" markerEnd="url(#arrowhead-custom)" />
-                <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="hsl(270, 60%, 60%)"
-                  strokeWidth={4} strokeOpacity={0.1} />
-                <text x={(s.x + t.x) / 2} y={(s.y + t.y) / 2 - 6} textAnchor="middle"
-                  fill="hsl(270, 60%, 70%)" fontSize="8" fontFamily="'Space Grotesk', sans-serif"
-                  opacity={isActive ? 1 : 0.6}>{r.type}</text>
-              </g>
-            );
-          })}
+          {/* Custom Relationship Edges (also virtualized) */}
+          {customRelationships
+            .filter(r => visibleIds.has(r.source) && visibleIds.has(r.target))
+            .filter(r => inView(getPos(r.source)) || inView(getPos(r.target)))
+            .map(r => {
+              const s = getPos(r.source);
+              const t = getPos(r.target);
+              const isActive = selectedEntityId === r.source || selectedEntityId === r.target;
+              return (
+                <g key={r.id}>
+                  <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="hsl(270, 60%, 60%)"
+                    strokeWidth={isActive ? 2.5 : 1.5} strokeOpacity={isActive ? 0.8 : 0.5}
+                    strokeDasharray="6,3" markerEnd="url(#arrowhead-custom)" />
+                  <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="hsl(270, 60%, 60%)"
+                    strokeWidth={4} strokeOpacity={0.1} />
+                  <text x={(s.x + t.x) / 2} y={(s.y + t.y) / 2 - 6} textAnchor="middle"
+                    fill="hsl(270, 60%, 70%)" fontSize="8" fontFamily="'Space Grotesk', sans-serif"
+                    opacity={isActive ? 1 : 0.6}>{r.type}</text>
+                </g>
+              );
+            })}
 
           {/* Nodes */}
-          {visibleEntities.map(entity => {
+          {renderEntities.map(entity => {
             const pos = getPos(entity.id);
             const isSelected = entity.id === selectedEntityId;
             const isHov = entity.id === hoveredEntityId;
+            const isPinned = entity.id === pinnedEntityId;
             const connected = isConnected(entity.id);
             const color = statusColorMap[entity.status];
             const nodeRadius = isSelected ? 22 : isHov ? 20 : 16;
@@ -296,7 +442,7 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
               <g
                 key={entity.id}
                 data-node="true"
-                onClick={(e) => { e.stopPropagation(); onEntitySelect(entity.id); }}
+                onClick={(e) => handleNodeClick(entity.id, e)}
                 onMouseEnter={() => onEntityHover(entity.id)}
                 onMouseLeave={() => onEntityHover(null)}
                 className="cursor-pointer"
@@ -317,6 +463,10 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
                   {entity.name.length > 20 ? entity.name.slice(0, 18) + '…' : entity.name}
                 </text>
                 <circle cx={pos.x + nodeRadius - 2} cy={pos.y - nodeRadius + 2} r={4} fill={color} />
+                {isPinned && (
+                  <circle cx={pos.x - nodeRadius + 2} cy={pos.y - nodeRadius + 2} r={4}
+                    fill="hsl(45, 90%, 60%)" stroke="hsl(220, 18%, 7%)" strokeWidth={1} />
+                )}
               </g>
             );
           })}
@@ -324,53 +474,131 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
       </svg>
 
       {/* Zoom / Pan HUD */}
-      <div className="pointer-events-auto absolute bottom-4 right-4 flex flex-col gap-1 rounded-lg border border-border/50 bg-background/85 p-1 backdrop-blur-md">
-        <button onClick={() => zoomBy(1.25)} title="Zoom in"
+      <div className="pointer-events-auto absolute bottom-14 right-4 flex flex-col gap-1 rounded-lg border border-border/50 bg-background/85 p-1 backdrop-blur-md">
+        <button onClick={() => zoomBy(1.25)} title="Zoom in (+)"
           className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
           <ZoomIn className="h-3.5 w-3.5" />
         </button>
-        <button onClick={() => zoomBy(1 / 1.25)} title="Zoom out"
+        <button onClick={() => zoomBy(1 / 1.25)} title="Zoom out (-)"
           className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
           <ZoomOut className="h-3.5 w-3.5" />
         </button>
-        <button onClick={focusSelected} title={selectedEntityId ? 'Focus selected' : 'Center'}
+        <button onClick={focusSelected} title={selectedEntityId ? 'Focus selected (F)' : 'Center (F)'}
           className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground disabled:opacity-40"
           disabled={!selectedEntityId}>
           <Locate className="h-3.5 w-3.5" />
         </button>
-        <button onClick={resetView} title="Reset view"
+        <button onClick={resetView} title="Reset view (0)"
           className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
           <Maximize2 className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => {
+            setTooltipMode(m => {
+              const next = m === 'hover' ? 'pinned' : 'hover';
+              if (next === 'hover') setPinnedEntityId(null);
+              return next;
+            });
+          }}
+          title={tooltipMode === 'pinned' ? 'Tooltip: Pinned (P)' : 'Tooltip: Hover (P)'}
+          className={`flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-muted/40 ${
+            tooltipMode === 'pinned' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+          }`}>
+          <Pin className="h-3.5 w-3.5" />
+        </button>
+        <button onClick={() => setShowShortcuts(s => !s)} title="Keyboard shortcuts (?)"
+          className={`flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-muted/40 ${
+            showShortcuts ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+          }`}>
+          <Keyboard className="h-3.5 w-3.5" />
         </button>
         <div className="mt-0.5 border-t border-border/40 pt-1 text-center font-mono text-[8px] text-muted-foreground">
           {Math.round(transform.k * 100)}%
         </div>
       </div>
 
-      {/* Hover tooltip */}
-      {hoveredEntity && tooltipPos && (
+      {/* Minimap */}
+      <div className="pointer-events-auto absolute bottom-14 left-4 rounded-lg border border-border/50 bg-background/85 p-1.5 backdrop-blur-md">
+        <div className="mb-1 flex items-center justify-between px-1">
+          <span className="font-mono text-[8px] uppercase tracking-wider text-muted-foreground">Minimap</span>
+          <span className="font-mono text-[8px] text-muted-foreground">{renderEntities.length}/{visibleEntities.length}</span>
+        </div>
+        <svg
+          ref={miniSvgRef}
+          width={miniW}
+          height={miniH}
+          className="cursor-crosshair rounded bg-muted/20"
+          onMouseDown={handleMiniDown}
+          onMouseMove={handleMiniMove}
+          onMouseUp={endMiniDrag}
+          onMouseLeave={endMiniDrag}
+        >
+          {/* Edges (faint) */}
+          {visibleRelationships.map(r => {
+            const s = getPos(r.source);
+            const t = getPos(r.target);
+            return (
+              <line key={r.id}
+                x1={s.x * miniScaleX} y1={s.y * miniScaleY}
+                x2={t.x * miniScaleX} y2={t.y * miniScaleY}
+                stroke="hsl(220, 15%, 30%)" strokeWidth={0.5} strokeOpacity={0.4} />
+            );
+          })}
+          {/* Nodes */}
+          {visibleEntities.map(e => {
+            const p = getPos(e.id);
+            const color = statusColorMap[e.status];
+            const isSel = e.id === selectedEntityId;
+            return (
+              <circle key={e.id}
+                cx={p.x * miniScaleX} cy={p.y * miniScaleY}
+                r={isSel ? 2.5 : 1.5}
+                fill={color} opacity={isSel ? 1 : 0.75} />
+            );
+          })}
+          {/* Viewport rect */}
+          <rect
+            x={Math.max(0, vpRect.x)}
+            y={Math.max(0, vpRect.y)}
+            width={Math.min(miniW, vpRect.w)}
+            height={Math.min(miniH, vpRect.h)}
+            fill="hsl(175, 70%, 50%)"
+            fillOpacity={0.1}
+            stroke="hsl(175, 70%, 60%)"
+            strokeWidth={1}
+          />
+        </svg>
+      </div>
+
+      {/* Hover / pinned tooltip */}
+      {tooltipEntity && tooltipPos && (
         <div
           className="pointer-events-none absolute z-10 w-56 -translate-x-1/2 rounded-lg border border-border/60 bg-background/95 p-3 shadow-xl backdrop-blur-md"
           style={{ left: tooltipPos.x, top: tooltipPos.y - 12, transform: `translate(-50%, -100%)` }}
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm">{entityTypeConfig[hoveredEntity.type].icon}</span>
-              <span className="font-display text-xs font-semibold text-foreground">{hoveredEntity.name}</span>
+              <span className="text-sm">{entityTypeConfig[tooltipEntity.type].icon}</span>
+              <span className="font-display text-xs font-semibold text-foreground">{tooltipEntity.name}</span>
             </div>
-            <span
-              className="rounded px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider"
-              style={{ backgroundColor: `${statusColorMap[hoveredEntity.status]}22`, color: statusColorMap[hoveredEntity.status] }}
-            >
-              {hoveredEntity.status}
-            </span>
+            <div className="flex items-center gap-1">
+              {tooltipMode === 'pinned' && pinnedEntityId === tooltipEntity.id && (
+                <Pin className="h-3 w-3 text-primary" />
+              )}
+              <span
+                className="rounded px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider"
+                style={{ backgroundColor: `${statusColorMap[tooltipEntity.status]}22`, color: statusColorMap[tooltipEntity.status] }}
+              >
+                {tooltipEntity.status}
+              </span>
+            </div>
           </div>
           <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-            {hoveredEntity.type} · confidence {hoveredEntity.confidence} · {hoveredConnCount} links
+            {tooltipEntity.type} · confidence {tooltipEntity.confidence} · {tooltipConnCount} links
           </div>
-          {hoveredEntity.metrics.slice(0, 3).length > 0 && (
+          {tooltipEntity.metrics.slice(0, 3).length > 0 && (
             <div className="mt-2 space-y-0.5 border-t border-border/40 pt-2">
-              {hoveredEntity.metrics.slice(0, 3).map((m, i) => (
+              {tooltipEntity.metrics.slice(0, 3).map((m, i) => (
                 <div key={i} className="flex items-baseline justify-between gap-2">
                   <span className="font-mono text-[9px] text-muted-foreground">{m.label}</span>
                   <span className="font-mono text-[10px] text-foreground">
@@ -382,6 +610,33 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Shortcuts overlay */}
+      {showShortcuts && (
+        <div className="pointer-events-auto absolute right-16 bottom-14 w-64 rounded-lg border border-border/60 bg-background/95 p-3 shadow-xl backdrop-blur-md">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Shortcuts</span>
+            <button onClick={() => setShowShortcuts(false)} className="font-mono text-[10px] text-muted-foreground hover:text-foreground">esc</button>
+          </div>
+          <div className="space-y-1 font-mono text-[10px]">
+            {[
+              ['+ / =', 'Zoom in'],
+              ['− / _', 'Zoom out'],
+              ['0', 'Reset view'],
+              ['F', 'Focus selected'],
+              ['← ↑ → ↓', 'Pan'],
+              ['P', 'Toggle pinned tooltip'],
+              ['?', 'Toggle this help'],
+              ['Drag', 'Pan canvas'],
+              ['Wheel', 'Zoom at cursor'],
+            ].map(([k, l]) => (
+              <div key={k} className="flex items-center justify-between text-muted-foreground">
+                <span className="text-foreground">{k}</span><span>{l}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
