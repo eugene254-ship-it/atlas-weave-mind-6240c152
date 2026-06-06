@@ -474,7 +474,7 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
       </svg>
 
       {/* Zoom / Pan HUD */}
-      <div className="pointer-events-auto absolute bottom-4 right-4 flex flex-col gap-1 rounded-lg border border-border/50 bg-background/85 p-1 backdrop-blur-md">
+      <div className="pointer-events-auto absolute bottom-14 right-4 flex flex-col gap-1 rounded-lg border border-border/50 bg-background/85 p-1 backdrop-blur-md">
         <button onClick={() => zoomBy(1.25)} title="Zoom in (+)"
           className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
           <ZoomIn className="h-3.5 w-3.5" />
@@ -518,7 +518,7 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
       </div>
 
       {/* Minimap */}
-      <div className="pointer-events-auto absolute bottom-4 left-4 rounded-lg border border-border/50 bg-background/85 p-1.5 backdrop-blur-md">
+      <div className="pointer-events-auto absolute bottom-14 left-4 rounded-lg border border-border/50 bg-background/85 p-1.5 backdrop-blur-md">
         <div className="mb-1 flex items-center justify-between px-1">
           <span className="font-mono text-[8px] uppercase tracking-wider text-muted-foreground">Minimap</span>
           <span className="font-mono text-[8px] text-muted-foreground">{renderEntities.length}/{visibleEntities.length}</span>
@@ -615,7 +615,7 @@ export function WorldCanvas({ width, height, selectedEntityId, onEntitySelect, a
 
       {/* Shortcuts overlay */}
       {showShortcuts && (
-        <div className="pointer-events-auto absolute right-16 bottom-4 w-64 rounded-lg border border-border/60 bg-background/95 p-3 shadow-xl backdrop-blur-md">
+        <div className="pointer-events-auto absolute right-16 bottom-14 w-64 rounded-lg border border-border/60 bg-background/95 p-3 shadow-xl backdrop-blur-md">
           <div className="mb-2 flex items-center justify-between">
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Shortcuts</span>
             <button onClick={() => setShowShortcuts(false)} className="font-mono text-[10px] text-muted-foreground hover:text-foreground">esc</button>
