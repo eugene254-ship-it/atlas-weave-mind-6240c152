@@ -1,6 +1,7 @@
-import { type WorldEntity, type WorldRelationship, entities, relationships, entityTypeConfig } from '@/data/worldModelData';
+import { useMemo, useState } from 'react';
+import { type WorldEntity, type WorldRelationship, entities, relationships, entityTypeConfig, type EntityType } from '@/data/worldModelData';
 import { SystemStateBadge, ConfidenceIndicator } from './SystemStateBadge';
-import { TrendingDown, TrendingUp, Minus, X, AlertTriangle, ArrowRight, Clock } from 'lucide-react';
+import { TrendingDown, TrendingUp, Minus, X, AlertTriangle, ArrowRight, Clock, Search, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
