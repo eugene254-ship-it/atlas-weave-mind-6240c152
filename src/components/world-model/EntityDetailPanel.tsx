@@ -121,11 +121,53 @@ export function EntityDetailPanel({ entity, onClose, onEntitySelect, onTraceCaus
             </div>
           </div>
 
+          {/* Related filter */}
+          <div className="border-b border-border/30 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Search className="h-3 w-3 text-muted-foreground" />
+              <input
+                value={relSearch}
+                onChange={e => setRelSearch(e.target.value)}
+                placeholder="Filter related entities…"
+                className="flex-1 rounded-md border border-border/40 bg-muted/30 px-2 py-1 font-mono text-[10px] text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none"
+              />
+              {(relSearch || relTypeFilter !== 'all') && (
+                <button
+                  onClick={() => { setRelSearch(''); setRelTypeFilter('all'); }}
+                  className="rounded px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground hover:text-foreground"
+                >clear</button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <Filter className="h-3 w-3 text-muted-foreground" />
+              <button
+                onClick={() => setRelTypeFilter('all')}
+                className={`rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                  relTypeFilter === 'all' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >all</button>
+              {relatedTypes.map(t => (
+                <button
+                  key={t}
+                  onClick={() => setRelTypeFilter(t)}
+                  className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                    relTypeFilter === t ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span>{entityTypeConfig[t].icon}</span>
+                  {entityTypeConfig[t].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Dependencies */}
           <div className="border-b border-border/30 p-4">
-            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Depends On</h3>
+            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Depends On <span className="text-foreground/40">({filteredDeps.length}/{deps.length})</span>
+            </h3>
             <div className="space-y-1">
-              {deps.map(d => (
+              {filteredDeps.map(d => (
                 <button
                   key={d.id}
                   onClick={() => onEntitySelect(d.id)}
@@ -136,14 +178,20 @@ export function EntityDetailPanel({ entity, onClose, onEntitySelect, onTraceCaus
                   <SystemStateBadge status={d.status} />
                 </button>
               ))}
-              {deps.length === 0 && <span className="text-xs text-muted-foreground italic">No upstream dependencies</span>}
+              {filteredDeps.length === 0 && (
+                <span className="text-xs text-muted-foreground italic">
+                  {deps.length === 0 ? 'No upstream dependencies' : 'No matches'}
+                </span>
+              )}
             </div>
           </div>
 
           <div className="border-b border-border/30 p-4">
-            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Influences</h3>
+            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Influences <span className="text-foreground/40">({filteredDepnts.length}/{depnts.length})</span>
+            </h3>
             <div className="space-y-1">
-              {depnts.map(d => (
+              {filteredDepnts.map(d => (
                 <button
                   key={d.id}
                   onClick={() => onEntitySelect(d.id)}
@@ -154,15 +202,21 @@ export function EntityDetailPanel({ entity, onClose, onEntitySelect, onTraceCaus
                   <SystemStateBadge status={d.status} />
                 </button>
               ))}
-              {depnts.length === 0 && <span className="text-xs text-muted-foreground italic">No downstream dependents</span>}
+              {filteredDepnts.length === 0 && (
+                <span className="text-xs text-muted-foreground italic">
+                  {depnts.length === 0 ? 'No downstream dependents' : 'No matches'}
+                </span>
+              )}
             </div>
           </div>
 
           {/* Relationships */}
           <div className="border-b border-border/30 p-4">
-            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Relationships</h3>
+            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Relationships <span className="text-foreground/40">({filteredRels.length}/{rels.length})</span>
+            </h3>
             <div className="space-y-1">
-              {rels.map(r => {
+              {filteredRels.map(r => {
                 const other = entities.find(e => e.id === (r.source === entity.id ? r.target : r.source));
                 if (!other) return null;
                 const isSource = r.source === entity.id;
@@ -180,8 +234,12 @@ export function EntityDetailPanel({ entity, onClose, onEntitySelect, onTraceCaus
                   </button>
                 );
               })}
+              {filteredRels.length === 0 && (
+                <span className="text-xs text-muted-foreground italic">No matches</span>
+              )}
             </div>
           </div>
+
 
           {/* Timeline */}
           <div className="p-4">
