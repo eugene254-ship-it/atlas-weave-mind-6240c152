@@ -24,12 +24,34 @@ const timelineTypeStyle: Record<string, string> = {
 };
 
 export function EntityDetailPanel({ entity, onClose, onEntitySelect, onTraceCausal }: Props) {
-  if (!entity) return null;
+  const [relSearch, setRelSearch] = useState('');
+  const [relTypeFilter, setRelTypeFilter] = useState<EntityType | 'all'>('all');
 
-  const config = entityTypeConfig[entity.type];
-  const deps = entities.filter(e => entity.dependencies.includes(e.id));
-  const depnts = entities.filter(e => entity.dependents.includes(e.id));
-  const rels = relationships.filter(r => r.source === entity.id || r.target === entity.id);
+  const config = entity ? entityTypeConfig[entity.type] : null;
+  const deps = entity ? entities.filter(e => entity.dependencies.includes(e.id)) : [];
+  const depnts = entity ? entities.filter(e => entity.dependents.includes(e.id)) : [];
+  const rels = entity ? relationships.filter(r => r.source === entity.id || r.target === entity.id) : [];
+
+  const matchesFilter = (e: WorldEntity) => {
+    if (relTypeFilter !== 'all' && e.type !== relTypeFilter) return false;
+    if (relSearch && !e.name.toLowerCase().includes(relSearch.toLowerCase())) return false;
+    return true;
+  };
+
+  const filteredDeps = useMemo(() => deps.filter(matchesFilter), [deps, relSearch, relTypeFilter]);
+  const filteredDepnts = useMemo(() => depnts.filter(matchesFilter), [depnts, relSearch, relTypeFilter]);
+  const filteredRels = useMemo(() => rels.filter(r => {
+    const other = entities.find(e => e.id === (r.source === entity?.id ? r.target : r.source));
+    return other ? matchesFilter(other) : false;
+  }), [rels, relSearch, relTypeFilter, entity?.id]);
+
+  const relatedTypes = useMemo(() => {
+    const set = new Set<EntityType>();
+    [...deps, ...depnts].forEach(e => set.add(e.type));
+    return Array.from(set);
+  }, [deps, depnts]);
+
+  if (!entity || !config) return null;
 
   return (
     <AnimatePresence>
